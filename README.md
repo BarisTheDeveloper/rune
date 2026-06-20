@@ -38,6 +38,11 @@ Rune allows Roblox developers to work entirely inside **VS Code** while keeping 
 | Configuration   | JSON           |
 | Package Manager | pnpm           |
 
+## Requirements
+
+- **Node.js** 18+ (LTS recommended)
+- **pnpm** 11+ (required package manager)
+
 ## Installation
 
 ```bash
@@ -45,7 +50,7 @@ Rune allows Roblox developers to work entirely inside **VS Code** while keeping 
 git clone https://github.com/BarisTheDeveloper/rune.git
 cd rune
 
-# Install dependencies
+# Install dependencies (pnpm required)
 pnpm install
 
 # Build the project (use npx tsc or ./node_modules/.bin/tsc)
