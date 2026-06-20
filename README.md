@@ -54,7 +54,7 @@ cd rune
 pnpm install
 
 # Build the project
-pnpm exec tsc
+npx tsc
 
 # Or on Windows PowerShell:
 ./node_modules/.bin/tsc.cmd
