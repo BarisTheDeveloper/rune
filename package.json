@@ -25,13 +25,6 @@
   "author": "BarisTheDeveloper",
   "license": "MIT",
   "type": "module",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.7.0",
-      "onFail": "download"
-    }
-  },
   "dependencies": {
     "chokidar": "^4.0.3",
     "commander": "^12.1.0",

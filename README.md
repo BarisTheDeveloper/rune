@@ -53,14 +53,14 @@ cd rune
 # Install dependencies (pnpm required)
 pnpm install
 
-# Build the project (use npx tsc or ./node_modules/.bin/tsc)
-npx tsc
+# Build the project
+pnpm exec tsc
 
 # Or on Windows PowerShell:
 ./node_modules/.bin/tsc.cmd
 
 # Link for global usage (optional)
-pnpm link --global
+pnpm link --global .
 ```
 
 ## CLI Commands
