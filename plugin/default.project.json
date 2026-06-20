@@ -1,0 +1,51 @@
+{
+  "name": "RuneStudioPlugin",
+  "tree": {
+    "$className": "Plugin",
+    "RunePlugin": {
+      "$className": "Folder",
+      "main": {
+        "$className": "Script",
+        "$path": "src/main.server.lua",
+        "$properties": {
+          "Source": {
+            "$path": "src/main.server.lua"
+          }
+        }
+      },
+      "ui": {
+        "$className": "Folder",
+        "MainWindow": {
+          "$className": "ModuleScript",
+          "$path": "src/ui/MainWindow.lua"
+        },
+        "FileTree": {
+          "$className": "ModuleScript",
+          "$path": "src/ui/FileTree.lua"
+        },
+        "StatusBar": {
+          "$className": "ModuleScript",
+          "$path": "src/ui/StatusBar.lua"
+        }
+      },
+      "sync": {
+        "$className": "Folder",
+        "WebSocketClient": {
+          "$className": "ModuleScript",
+          "$path": "src/sync/WebSocketClient.lua"
+        },
+        "InstanceSync": {
+          "$className": "ModuleScript",
+          "$path": "src/sync/InstanceSync.lua"
+        }
+      },
+      "utils": {
+        "$className": "Folder",
+        "Theme": {
+          "$className": "ModuleScript",
+          "$path": "src/utils/Theme.lua"
+        }
+      }
+    }
+  }
+}

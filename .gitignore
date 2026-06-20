@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.js.map
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+*.spec.ts
+*.test.ts
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Roblox
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+!plugin/**/*.rbxm
+!plugin/**/*.rbxmx
+
+# Project specific
+Plugins/
+src/Packages/
