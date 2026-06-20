@@ -80,6 +80,7 @@ export interface RuneConfig {
 export interface InitOptions {
   name?: string;
   path?: string;
+  type?: "game" | "plugin" | "module";
 }
 
 export interface WatchOptions {

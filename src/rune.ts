@@ -40,8 +40,12 @@ rune
   .command("init")
   .description("Creates a new Rune project with default folder structure")
   .option("-n, --name <name>", "Project name", "MyRuneProject")
+  .option("-t, --type <type>", "Project type: game, plugin, or module", "game")
   .action(async (options) => {
-    await initCommand({ name: options.name });
+    await initCommand({
+      name: options.name,
+      type: options.type,
+    });
   });
 
 // Watch command
