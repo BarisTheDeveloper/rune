@@ -58,12 +58,22 @@ function WebSocketClient.new(host, port)
 end
 
 function WebSocketClient:Connect()
+	-- Check if WebSocket API is available
+	if not WebSocket then
+		self.OnError:Fire("WebSocket API not available in this Roblox version. Please update Roblox Studio to the latest version.")
+		return
+	end
+
 	local url = string.format("ws://%s:%d", self.Host, self.Port)
 
 	task.spawn(function()
 		local success, result = pcall(function()
 			-- Roblox WebSocket API
 			self.Socket = WebSocket.connect(url)
+
+			if not self.Socket then
+				error("Failed to create WebSocket connection")
+			end
 
 			self.Socket.OnMessage:Connect(function(message)
 				self:HandleMessage(message)
@@ -79,7 +89,7 @@ function WebSocketClient:Connect()
 		end)
 
 		if not success then
-			self.OnError:Fire(result)
+			self.OnError:Fire(tostring(result))
 			self:AttemptReconnect()
 		end
 	end)
