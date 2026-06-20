@@ -7,10 +7,10 @@
     "rune": "dist/rune.js"
   },
   "scripts": {
-    "watch": "pnpm tsc --watch",
-    "build": "pnpm tsc",
-    "start": "pnpm tsx src/rune.ts",
-    "dev": "pnpm tsx src/rune.ts",
+    "watch": "tsc --watch",
+    "build": "tsc",
+    "start": "tsx src/rune.ts",
+    "dev": "tsx src/rune.ts",
     "lint": "eslint src/**/*.ts",
     "test": "vitest"
   },
