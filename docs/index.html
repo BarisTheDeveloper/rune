@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rune — Modern Roblox Toolkit</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #131318;
+    --bg2: #1a1a24;
+    --bg3: #22222e;
+    --border: #2a2a38;
+    --text: #d4d4dc;
+    --text2: #9a9aaa;
+    --accent: #0af;
+    --accent2: #a78bfa;
+    --gradient: linear-gradient(135deg, #0af, #a78bfa);
+    --green: #4ade80;
+    --red: #f87171;
+    --yellow: #facc15;
+    --radius: 12px;
+    --radius-sm: 6px;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent2); }
+  .container { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(19,19,24,0.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav .inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; max-width: 820px; margin: 0 auto; padding: 0 24px;
+  }
+  nav .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.5px; }
+  nav .logo span { color: var(--accent); }
+  nav a { color: var(--text2); font-size: 14px; margin-left: 24px; }
+  nav a:hover { color: var(--text); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 20px; border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 600; transition: all 0.15s;
+    cursor: pointer; border: none;
+  }
+  .btn-primary { background: var(--gradient); color: #fff; }
+  .btn-primary:hover { opacity: 0.9; color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--accent); }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  header {
+    padding: 80px 0 60px; text-align: center;
+  }
+  header .logo-icon { font-size: 64px; margin-bottom: 16px; }
+  header h1 { font-size: 48px; font-weight: 800; letter-spacing: -1.5px; margin-bottom: 8px; background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  header p { color: var(--text2); font-size: 18px; max-width: 520px; margin: 0 auto 24px; }
+  section { padding: 64px 0; }
+  section:nth-child(even) { background: var(--bg2); }
+  h2 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: var(--text2); font-size: 15px; margin-bottom: 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .icon { font-size: 24px; margin-bottom: 8px; }
+  .card h3 { margin-bottom: 4px; }
+  .card p { color: var(--text2); font-size: 14px; }
+  pre {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    overflow-x: auto; font-family: var(--mono); font-size: 13px;
+    line-height: 1.7; color: var(--text);
+  }
+  code { font-family: var(--mono); font-size: 13px; }
+  .inline-code {
+    background: var(--bg3); padding: 2px 6px; border-radius: 4px;
+    font-size: 13px; border: 1px solid var(--border);
+  }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 14px;
+  }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; font-weight: 600;
+  }
+  .tag-green { background: rgba(74,222,128,0.12); color: var(--green); }
+  .tag-red { background: rgba(248,113,113,0.12); color: var(--red); }
+  .tag-yellow { background: rgba(250,204,21,0.12); color: var(--yellow); }
+  .footer {
+    padding: 32px 0; text-align: center;
+    border-top: 1px solid var(--border); color: var(--text2); font-size: 14px;
+  }
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { display: flex; gap: 12px; align-items: flex-start; }
+  .step-num {
+    flex-shrink: 0; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--gradient);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="inner">
+    <div class="logo">◆ <span>RUNE</span></div>
+    <div>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#commands">Commands</a>
+      <a href="https://github.com/BarisTheDeveloper/rune">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="container">
+    <div class="logo-icon">◆</div>
+    <h1>Rune</h1>
+    <p>Modern Roblox development toolkit. Bidirectional sync between filesystem and Studio. No Rojo required.</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a href="#install" class="btn btn-primary">Get Started</a>
+      <a href="https://github.com/BarisTheDeveloper/rune" class="btn btn-outline">View on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="container">
+    <h2>Features</h2>
+    <p class="sub">Everything you need for Roblox development.</p>
+    <div class="grid">
+      <div class="card"><div class="icon">🔄</div><h3>Real-time Sync</h3><p>Filesystem changes reflect instantly in Studio via WebSocket or HTTP polling.</p></div>
+      <div class="card"><div class="icon">🎨</div><h3>Minimal Plugin</h3><p>VS Code-inspired dark UI with searchable file tree and activity log.</p></div>
+      <div class="card"><div class="icon">🔔</div><h3>Toast Notifications</h3><p>Connect, sync, and error alerts directly in Studio.</p></div>
+      <div class="card"><div class="icon">↩️</div><h3>Undo System</h3><p>Rollback up to 20 recent changes with one click.</p></div>
+      <div class="card"><div class="icon">📦</div><h3>Zero Dependencies</h3><p>Custom RBXMX builder — no Rojo, no external tools needed.</p></div>
+      <div class="card"><div class="icon">⏯️</div><h3>Play Mode Safe</h3><p>Auto-pauses HTTP polling during playtesting.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="container">
+    <h2>Install</h2>
+    <p class="sub">Get up and running in seconds.</p>
+
+    <h3 style="margin-top:20px">CLI</h3>
+    <pre><code>git clone https://github.com/BarisTheDeveloper/rune.git
+cd rune
+pnpm install
+npx tsc</code></pre>
+
+    <h3 style="margin-top:20px">Studio Plugin</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div>Run <span class="inline-code">node install-plugin.mjs</span> to build and install automatically</div></div>
+      <div class="step"><div class="step-num">2</div><div>Or download <code>RunePlugin.rbxmx</code> from <a href="https://github.com/BarisTheDeveloper/rune/releases">Releases</a></div></div>
+      <div class="step"><div class="step-num">3</div><div>Place in <span class="inline-code">%LOCALAPPDATA%\Roblox\Plugins\</span></div></div>
+      <div class="step"><div class="step-num">4</div><div>Restart Roblox Studio — look for <strong>◆ RUNE</strong> in Plugins tab</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="commands">
+  <div class="container">
+    <h2>Commands</h2>
+    <p class="sub">CLI at your fingertips.</p>
+    <table>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td><code>rune init</code></td><td>Create new project with full Roblox folder structure</td></tr>
+      <tr><td><code>rune watch</code></td><td>Watch files + start sync server</td></tr>
+      <tr><td><code>rune sync</code></td><td>Start sync server only</td></tr>
+      <tr><td><code>rune build</code></td><td>Build <code>.rbxlx</code> place file</td></tr>
+      <tr><td><code>rune install</code></td><td>Install packages or plugins</td></tr>
+    </table>
+
+    <h3 style="margin-top:32px">Protocol</h3>
+    <table>
+      <tr><th>Direction</th><th>Message</th><th>Purpose</th></tr>
+      <tr><td><span class="tag tag-green">CLI→Studio</span></td><td><code>full_sync</code></td><td>Complete hierarchy</td></tr>
+      <tr><td><span class="tag tag-green">CLI→Studio</span></td><td><code>instance_created</code></td><td>File added</td></tr>
+      <tr><td><span class="tag tag-green">CLI→Studio</span></td><td><code>instance_updated</code></td><td>File changed</td></tr>
+      <tr><td><span class="tag tag-yellow">Studio→CLI</span></td><td><code>studio_instance_created</code></td><td>New instance</td></tr>
+      <tr><td><span class="tag tag-yellow">Studio→CLI</span></td><td><code>studio_script_updated</code></td><td>Script source changed</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="container">
+    <h2>Tech Stack</h2>
+    <div class="grid" style="margin-top:24px">
+      <div class="card"><h3>TypeScript</h3><p>CLI runtime with Node.js + Commander</p></div>
+      <div class="card"><h3>WebSocket</h3><p>Primary transport via <code>ws</code> library</p></div>
+      <div class="card"><h3>HTTP Polling</h3><p>Automatic fallback on port+1</p></div>
+      <div class="card"><h3>Chokidar</h3><p>File system watching</p></div>
+      <div class="card"><h3>RBXMX Builder</h3><p>Custom XML builder — zero Rojo dependency</p></div>
+      <div class="card"><h3>Luau</h3><p>Roblox Studio plugin</p></div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <p>◆ RUNE · Built by <a href="https://github.com/BarisTheDeveloper">BarisTheDeveloper</a> · <a href="https://github.com/BarisTheDeveloper/rune/blob/master/LICENSE">MIT</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
