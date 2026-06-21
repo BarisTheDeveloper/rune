@@ -5,7 +5,7 @@
 
 import chokidar from "chokidar";
 import type { FSWatcher } from "chokidar";
-import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname, basename, extname } from "node:path";
 import type { InstanceDefinition, RobloxClassName } from "../types/index.js";
 import type { ScriptType } from "../utils/script-detector.js";
@@ -639,5 +639,74 @@ export class FileWatcher {
    */
   public getFilePathForInstance(instanceId: string): string | undefined {
     return this.instanceToFileMap.get(instanceId);
+  }
+
+  /**
+   * Creates a file on disk for a Studio-created instance
+   */
+  public createFileForInstance(
+    instance: import("../models/roblox-instance.js").RobloxInstanceModel,
+    tree: import("../models/instance-tree.js").InstanceTree,
+  ): string | null {
+    // Find the service folder by walking up the parent chain
+    const pathParts: string[] = [instance.name];
+    let current = instance;
+    while (current.parentId) {
+      const parent = tree.getInstance(current.parentId);
+      if (!parent) break;
+      pathParts.unshift(parent.name);
+      current = parent;
+    }
+
+    // Generate extension suffix
+    let suffix = "";
+    if (instance.className === "ModuleScript") suffix = ".module";
+    else if (instance.className === "LocalScript") suffix = ".client";
+    else if (instance.className === "Script") suffix = ".server";
+
+    const fileName = `${instance.name}${suffix}.luau`;
+    const relativePath = join("src", ...pathParts.slice(1), fileName);
+
+    const fullPath = join(this.projectRoot, relativePath);
+
+    try {
+      if (this.watcher) this.watcher.unwatch(fullPath);
+      writeFileSync(fullPath, instance.source || "", "utf-8");
+
+      this.fileToInstanceMap.set(relativePath, instance.id);
+      this.instanceToFileMap.set(instance.id, relativePath);
+
+      if (this.watcher) {
+        setTimeout(() => this.watcher?.add(fullPath), 500);
+      }
+
+      logger.success(`Studio → File: ${relativePath}`);
+      return relativePath;
+    } catch (error) {
+      logger.error(`Failed to create file: ${fullPath}`);
+      return null;
+    }
+  }
+
+  /**
+   * Deletes the file on disk for a Studio-deleted instance
+   */
+  public deleteFileForInstance(instanceId: string): void {
+    const relativePath = this.instanceToFileMap.get(instanceId);
+    if (!relativePath) {
+      logger.warn(`No file mapping for deleted instance: ${instanceId}`);
+      return;
+    }
+
+    const fullPath = join(this.projectRoot, relativePath);
+    try {
+      if (this.watcher) this.watcher.unwatch(fullPath);
+      unlinkSync(fullPath);
+      this.fileToInstanceMap.delete(relativePath);
+      this.instanceToFileMap.delete(instanceId);
+      logger.success(`Studio → Deleted: ${relativePath}`);
+    } catch (error) {
+      logger.error(`Failed to delete file: ${fullPath}`);
+    }
   }
 }

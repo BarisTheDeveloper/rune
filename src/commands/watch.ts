@@ -9,6 +9,7 @@ import { configManager, ConfigManager } from "../config/index.js";
 import { FileWatcher } from "../filesystem/index.js";
 import { SyncServer } from "../websocket/index.js";
 import { InstanceTree } from "../models/index.js";
+import { RobloxInstanceModel } from "../models/roblox-instance.js";
 
 /**
  * Starts the file watcher and sync server
@@ -97,17 +98,20 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
 
     syncServer.setOnInstanceCreate((instance) => {
       logger.info(`Studio created instance: ${instance.name}`);
-      // In bidirectional sync, we would update the filesystem here
+      // Create file on disk
+      const filePath = fileWatcher.createFileForInstance(instance, instanceTree);
+      if (filePath) {
+        logger.success(`Studio → File: ${filePath}`);
+      }
     });
 
     syncServer.setOnInstanceUpdate((instance) => {
       logger.info(`Studio updated instance: ${instance.name}`);
-      // In bidirectional sync, we would update the filesystem here
     });
 
     syncServer.setOnInstanceDelete((instanceId) => {
       logger.info(`Studio deleted instance: ${instanceId}`);
-      // In bidirectional sync, we would update the filesystem here
+      fileWatcher.deleteFileForInstance(instanceId);
     });
 
     syncServer.setOnInstanceMove((instanceId, newParentId) => {
