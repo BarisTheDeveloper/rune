@@ -513,9 +513,6 @@ export class FileWatcher {
     let currentParentId: string | null = null;
 
     for (const part of parts) {
-      // Build the path for this specific folder level
-      const partPath = currentParentId ? `${normalized}::${part}` : normalized;
-      
       // Check if folder already exists under this parent
       const existing = this.instanceTree.findInstance(part, currentParentId);
       if (existing) {
@@ -523,9 +520,10 @@ export class FileWatcher {
         continue;
       }
 
-      const newInst = this.createFolderInstance(part, currentParentId, partPath);
+      const newInst = this.createFolderInstance(part, currentParentId, normalized);
       this.instanceTree.addInstance(newInst);
-      this.fileToInstanceMap.set(partPath, newInst.id);
+      this.fileToInstanceMap.set(normalized, newInst.id);
+      this.instanceToFileMap.set(newInst.id, normalized);
       currentParentId = newInst.id;
     }
 
@@ -670,7 +668,7 @@ export class FileWatcher {
       current = parent;
     }
 
-    const relativeDir = join("src", ...pathParts.slice(1));
+    const relativeDir = join("src", ...pathParts);
     const fullDir = join(this.projectRoot, relativeDir);
 
     try {
