@@ -1,6 +1,6 @@
 --[[
-	Rune Studio Plugin - Modern Main Window v3
-	Card-based layout, search, refined design
+	Rune Studio Plugin v3 — Minimal Modern UI
+	Single-line connection, toast notifications, logo header
 ]]
 
 local Theme = require(script.Parent.Parent.utils.Theme)
@@ -14,7 +14,7 @@ MainWindow.__index = MainWindow
 local Signal = {}
 Signal.__index = Signal
 function Signal.new() local s = setmetatable({}, Signal); s._l = {}; return s end
-function Signal:Connect(f) table.insert(self._l, f); return { Disconnect = function() for i, x in ipairs(self._l) do if x == f then table.remove(self._l, i); break end end end } end
+function Signal:Connect(f) table.insert(self._l, f); return {Disconnect = function() for i, x in ipairs(self._l) do if x == f then table.remove(self._l, i); break end end end} end
 function Signal:Fire(...) for _, f in ipairs(self._l) do task.spawn(f, ...) end end
 
 function MainWindow.new(plugin)
@@ -31,10 +31,10 @@ function MainWindow.new(plugin)
 	self.OnSyncToggle = Signal.new()
 	self.OnUndoRequested = Signal.new()
 
-	self.Widget = plugin:CreateDockWidgetPluginGui("RuneSyncPanelV3",
-		DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, t.Sizes.PanelW, 500, 280, 320))
-	self.Widget.Title = "Rune Sync"
-	self.Widget.Name = "RuneSyncPanelV3"
+	self.Widget = plugin:CreateDockWidgetPluginGui("RunePanel",
+		DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, 300, 500, 260, 320))
+	self.Widget.Title = "◆ RUNE"
+	self.Widget.Name = "RunePanel"
 
 	self:BuildUI()
 
@@ -48,92 +48,101 @@ end
 
 function MainWindow:BuildUI()
 	local t = Theme
+	local W = function(name, parent) return Instance.new(name, parent) end
 
-	local root = Instance.new("Frame")
+	local root = W("Frame")
 	root.Size = UDim2.new(1, 0, 1, 0)
 	root.BackgroundColor3 = t.Colors.Bg
 	root.BorderSizePixel = 0
 	root.Parent = self.Widget
 
 	-- === HEADER ===
-	local header = Instance.new("Frame")
-	header.Size = UDim2.new(1, 0, 0, 40)
-	header.BackgroundColor3 = t.Colors.BgHeader
+	local header = W("Frame")
+	header.Size = UDim2.new(1, 0, 0, 36)
+	header.BackgroundColor3 = t.Colors.Bg
 	header.BorderSizePixel = 0
 	header.Parent = root
-	Instance.new("UICorner", header).CornerRadius = t.Radius.Md
 
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -16, 1, 0)
-	title.Position = UDim2.new(0, 10, 0, 0)
+	local logo = W("TextLabel")
+	logo.Size = UDim2.new(0, 24, 0, 24)
+	logo.Position = UDim2.new(0, 10, 0, 6)
+	logo.BackgroundTransparency = 1
+	logo.Text = "◆"
+	logo.TextColor3 = t.Colors.Accent
+	logo.Font = t.Fonts.Body
+	logo.TextSize = 20
+	logo.Parent = header
+
+	local title = W("TextLabel")
+	title.Size = UDim2.new(1, -90, 1, 0)
+	title.Position = UDim2.new(0, 36, 0, 0)
 	title.BackgroundTransparency = 1
-	title.Text = "Rune Sync"
+	title.Text = "RUNE"
 	title.TextColor3 = t.Colors.TextBright
 	title.Font = t.Fonts.Title
 	title.TextSize = t.Sizes.Title
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = header
 
-	-- === CONNECTION CARD ===
-	local connCard = Instance.new("Frame")
-	connCard.Size = UDim2.new(1, -16, 0, t.Sizes.ConnBarH + 8)
-	connCard.Position = UDim2.new(0, 8, 0, 46)
-	connCard.BackgroundColor3 = t.Colors.BgCard
-	connCard.BorderSizePixel = 1
-	connCard.BorderColor3 = t.Colors.Border
-	connCard.Parent = root
-	Instance.new("UICorner", connCard).CornerRadius = t.Radius.Md
+	-- Version badge
+	local ver = W("TextLabel")
+	ver.Size = UDim2.new(0, 50, 0, 16)
+	ver.Position = UDim2.new(1, -56, 0, 10)
+	ver.BackgroundColor3 = t.Colors.BgCard
+	ver.BorderSizePixel = 1
+	ver.BorderColor3 = t.Colors.Border
+	ver.Text = "v2.2"
+	ver.TextColor3 = t.Colors.TextDim
+	ver.Font = t.Fonts.Mono
+	ver.TextSize = t.Sizes.Tiny
+	ver.Parent = header
+	Instance.new("UICorner", ver).CornerRadius = t.Radius.Xs
 
-	-- Host
-	local hostBg = Instance.new("Frame")
-	hostBg.Size = UDim2.new(0.52, -4, 0, t.Sizes.InputH)
-	hostBg.Position = UDim2.new(0, 6, 0, 6)
-	hostBg.BackgroundColor3 = t.Colors.BgInput
-	hostBg.BorderSizePixel = 1
-	hostBg.BorderColor3 = t.Colors.Border
-	hostBg.Parent = connCard
-	Instance.new("UICorner", hostBg).CornerRadius = t.Radius.Sm
+	-- Header line
+	local hl = W("Frame")
+	hl.Size = UDim2.new(1, 0, 0, 1)
+	hl.Position = UDim2.new(0, 0, 1, 0)
+	hl.BackgroundColor3 = t.Colors.Border
+	hl.BorderSizePixel = 0
+	hl.Parent = header
 
-	self.HostInput = Instance.new("TextBox")
-	self.HostInput.Size = UDim2.new(1, -12, 1, 0)
-	self.HostInput.Position = UDim2.new(0, 6, 0, 0)
-	self.HostInput.BackgroundTransparency = 1
-	self.HostInput.Text = "localhost"
-	self.HostInput.PlaceholderText = "Host"
-	self.HostInput.TextColor3 = t.Colors.Text
-	self.HostInput.PlaceholderColor3 = t.Colors.TextDim
-	self.HostInput.Font = t.Fonts.Mono
-	self.HostInput.TextSize = t.Sizes.Small
-	self.HostInput.ClearTextOnFocus = false
-	self.HostInput.Parent = hostBg
+	-- === CONNECTION BAR ===
+	local connBar = W("Frame")
+	connBar.Size = UDim2.new(1, -12, 0, 32)
+	connBar.Position = UDim2.new(0, 6, 0, 42)
+	connBar.BackgroundColor3 = t.Colors.BgCard
+	connBar.BorderSizePixel = 1
+	connBar.BorderColor3 = t.Colors.Border
+	connBar.Parent = root
+	Instance.new("UICorner", connBar).CornerRadius = t.Radius.Md
 
-	-- Port
-	local portBg = Instance.new("Frame")
-	portBg.Size = UDim2.new(0.22, -4, 0, t.Sizes.InputH)
-	portBg.Position = UDim2.new(0.52, 2, 0, 6)
-	portBg.BackgroundColor3 = t.Colors.BgInput
-	portBg.BorderSizePixel = 1
-	portBg.BorderColor3 = t.Colors.Border
-	portBg.Parent = connCard
-	Instance.new("UICorner", portBg).CornerRadius = t.Radius.Sm
+	-- Connection dot
+	self.ConnDot = W("Frame")
+	self.ConnDot.Size = UDim2.new(0, 8, 0, 8)
+	self.ConnDot.Position = UDim2.new(0, 8, 0.5, -4)
+	self.ConnDot.BackgroundColor3 = t.Colors.TextDim
+	self.ConnDot.BorderSizePixel = 0
+	self.ConnDot.Parent = connBar
+	Instance.new("UICorner", self.ConnDot).CornerRadius = UDim.new(1, 0)
 
-	self.PortInput = Instance.new("TextBox")
-	self.PortInput.Size = UDim2.new(1, -12, 1, 0)
-	self.PortInput.Position = UDim2.new(0, 6, 0, 0)
-	self.PortInput.BackgroundTransparency = 1
-	self.PortInput.Text = "34872"
-	self.PortInput.PlaceholderText = "Port"
-	self.PortInput.TextColor3 = t.Colors.Text
-	self.PortInput.PlaceholderColor3 = t.Colors.TextDim
-	self.PortInput.Font = t.Fonts.Mono
-	self.PortInput.TextSize = t.Sizes.Small
-	self.PortInput.ClearTextOnFocus = false
-	self.PortInput.Parent = portBg
+	-- Single input: host:port
+	self.AddressInput = W("TextBox")
+	self.AddressInput.Size = UDim2.new(1, -90, 1, 0)
+	self.AddressInput.Position = UDim2.new(0, 22, 0, 0)
+	self.AddressInput.BackgroundTransparency = 1
+	self.AddressInput.Text = "localhost:34872"
+	self.AddressInput.PlaceholderText = "host:port"
+	self.AddressInput.TextColor3 = t.Colors.Text
+	self.AddressInput.PlaceholderColor3 = t.Colors.TextDim
+	self.AddressInput.Font = t.Fonts.Mono
+	self.AddressInput.TextSize = t.Sizes.Small
+	self.AddressInput.ClearTextOnFocus = false
+	self.AddressInput.Parent = connBar
 
-	-- Connect btn
-	self.ConnectBtn = Instance.new("TextButton")
-	self.ConnectBtn.Size = UDim2.new(0.26, -4, 0, t.Sizes.InputH)
-	self.ConnectBtn.Position = UDim2.new(0.74, 2, 0, 6)
+	-- Connect button
+	self.ConnectBtn = W("TextButton")
+	self.ConnectBtn.Size = UDim2.new(0, 56, 0, 22)
+	self.ConnectBtn.Position = UDim2.new(1, -62, 0.5, -11)
 	self.ConnectBtn.BackgroundColor3 = t.Colors.Accent
 	self.ConnectBtn.BorderSizePixel = 0
 	self.ConnectBtn.Text = "Connect"
@@ -141,104 +150,84 @@ function MainWindow:BuildUI()
 	self.ConnectBtn.Font = t.Fonts.Header
 	self.ConnectBtn.TextSize = t.Sizes.Small
 	self.ConnectBtn.AutoButtonColor = true
-	self.ConnectBtn.Parent = connCard
+	self.ConnectBtn.Parent = connBar
 	Instance.new("UICorner", self.ConnectBtn).CornerRadius = t.Radius.Sm
 
-	-- Connection status dot + label
-	self.ConnDot = Instance.new("Frame")
-	self.ConnDot.Size = UDim2.new(0, 6, 0, 6)
-	self.ConnDot.Position = UDim2.new(0, 8, 0, 6)
-	self.ConnDot.BackgroundColor3 = t.Colors.TextDim
-	self.ConnDot.BorderSizePixel = 0
-	self.ConnDot.Parent = connCard
-	Instance.new("UICorner", self.ConnDot).CornerRadius = UDim.new(1, 0)
-
-	self.ConnLabel = Instance.new("TextLabel")
-	self.ConnLabel.Size = UDim2.new(0, 120, 0, 12)
-	self.ConnLabel.Position = UDim2.new(0, 18, 0, 3)
-	self.ConnLabel.BackgroundTransparency = 1
-	self.ConnLabel.Text = "Disconnected"
-	self.ConnLabel.TextColor3 = t.Colors.TextDim
-	self.ConnLabel.Font = t.Fonts.Tiny
-	self.ConnLabel.TextSize = t.Sizes.Tiny
-	self.ConnLabel.TextXAlignment = Enum.TextXAlignment.Left
-	self.ConnLabel.Parent = connCard
-
 	self.ConnectBtn.MouseButton1Click:Connect(function()
-		if self.IsConnected then self.OnDisconnectRequested:Fire()
-		else self.OnConnectRequested:Fire(self.HostInput.Text, tonumber(self.PortInput.Text) or 34872) end
+		if self.IsConnected then
+			self.OnDisconnectRequested:Fire()
+		else
+			local addr = self.AddressInput.Text
+			local host, port = addr:match("^([^:]+):(%d+)$")
+			self.OnConnectRequested:Fire(host or "localhost", tonumber(port) or 34873)
+		end
 	end)
 
-	-- Quick actions row
-	local actionsFrame = Instance.new("Frame")
-	actionsFrame.Size = UDim2.new(1, 0, 0, 16)
-	actionsFrame.Position = UDim2.new(0, 8, 0, 46 + t.Sizes.ConnBarH + 10)
-	actionsFrame.BackgroundTransparency = 1
-	actionsFrame.Parent = root
+	-- Quick actions
+	local actions = W("Frame")
+	actions.Size = UDim2.new(1, -12, 0, 18)
+	actions.Position = UDim2.new(0, 6, 0, 78)
+	actions.BackgroundTransparency = 1
+	actions.Parent = root
 
-	local function makeActionBtn(text, x)
-		local b = Instance.new("TextButton")
-		b.Size = UDim2.new(0, 70, 0, 16)
+	local function btn(text, x, w)
+		local b = W("TextButton")
+		b.Size = UDim2.new(0, w, 1, 0)
 		b.Position = UDim2.new(0, x, 0, 0)
-		b.BackgroundColor3 = t.Colors.BgCard; b.BorderSizePixel = 1; b.BorderColor3 = t.Colors.Border
-		b.Text = text; b.TextColor3 = t.Colors.TextDim; b.Font = t.Fonts.Tiny; b.TextSize = t.Sizes.Tiny
+		b.BackgroundColor3 = t.Colors.BgCard
+		b.BorderSizePixel = 1
+		b.BorderColor3 = t.Colors.Border
+		b.Text = text
+		b.TextColor3 = t.Colors.TextDim
+		b.Font = t.Fonts.Tiny
+		b.TextSize = t.Sizes.Tiny
 		b.AutoButtonColor = false
-		b.Parent = actionsFrame
+		b.Parent = actions
 		Instance.new("UICorner", b).CornerRadius = t.Radius.Xs
 		b.MouseEnter:Connect(function() b.BackgroundColor3 = t.Colors.BgHover; b.TextColor3 = t.Colors.TextMuted end)
 		b.MouseLeave:Connect(function() b.BackgroundColor3 = t.Colors.BgCard; b.TextColor3 = t.Colors.TextDim end)
 		return b
 	end
 
-	local syncBtn = makeActionBtn("↻ Sync", 0)
-	syncBtn.MouseButton1Click:Connect(function()
+	self.SyncBtn = btn("↻ Sync", 0, 56)
+	self.SyncBtn.MouseButton1Click:Connect(function()
 		if syncHandler then syncHandler:RequestSync() end
 	end)
 
-	local expandBtn = makeActionBtn("⊞ All", 76)
-	expandBtn.MouseButton1Click:Connect(function()
+	local expBtn = btn("⊞", 60, 28)
+	expBtn.MouseButton1Click:Connect(function()
 		if self.FileTree then
-			for id, _ in pairs(self.FileTree.Nodes) do
-				self.FileTree.ExpandedNodes[id] = true
-			end
+			for id in pairs(self.FileTree.Nodes) do self.FileTree.ExpandedNodes[id] = true end
 			self.FileTree:Refresh()
 		end
 	end)
 
-	local collapseBtn = makeActionBtn("⊟ All", 152)
-	collapseBtn.MouseButton1Click:Connect(function()
-		if self.FileTree then
-			self.FileTree.ExpandedNodes = {}
-			self.FileTree:Refresh()
-		end
+	local colBtn = btn("⊟", 92, 28)
+	colBtn.MouseButton1Click:Connect(function()
+		if self.FileTree then self.FileTree.ExpandedNodes = {}; self.FileTree:Refresh() end
 	end)
 
-	-- Adjust tab bar Y
-	tabY = 46 + t.Sizes.ConnBarH + 30
-
-	-- === TAB BAR ===
-	local tabY = 46 + t.Sizes.ConnBarH + 14
-	local tabBar = Instance.new("Frame")
+	-- === TABS ===
+	local tabY = 100
+	local tabBar = W("Frame")
 	tabBar.Size = UDim2.new(1, 0, 0, t.Sizes.TabH)
 	tabBar.Position = UDim2.new(0, 0, 0, tabY)
 	tabBar.BackgroundColor3 = t.Colors.Bg
 	tabBar.BorderSizePixel = 0
 	tabBar.Parent = root
 
-	-- Tab underline
-	local tabLine = Instance.new("Frame")
+	local tabLine = W("Frame")
 	tabLine.Size = UDim2.new(1, 0, 0, 1)
 	tabLine.Position = UDim2.new(0, 0, 1, -1)
 	tabLine.BackgroundColor3 = t.Colors.Border
 	tabLine.BorderSizePixel = 0
 	tabLine.Parent = tabBar
 
-	self:CreateTab(tabBar, "📁 Files", "files", 0, 10)
-	self:CreateTab(tabBar, "📋 Activity", "activity", 110, 10)
+	self:MakeTab(tabBar, "Files", "files", 10)
+	self:MakeTab(tabBar, "Activity", "activity", 90)
 
-	-- Tab indicator
-	self.TabInd = Instance.new("Frame")
-	self.TabInd.Size = UDim2.new(0, 100, 0, 2)
+	self.TabInd = W("Frame")
+	self.TabInd.Size = UDim2.new(0, 70, 0, 2)
 	self.TabInd.Position = UDim2.new(0, 10, 1, -1)
 	self.TabInd.BackgroundColor3 = t.Colors.Accent
 	self.TabInd.BorderSizePixel = 0
@@ -246,7 +235,7 @@ function MainWindow:BuildUI()
 
 	-- === CONTENT ===
 	local contentY = tabY + t.Sizes.TabH
-	self.ContentFrame = Instance.new("Frame")
+	self.ContentFrame = W("Frame")
 	self.ContentFrame.Size = UDim2.new(1, 0, 1, -(contentY + t.Sizes.StatusBarH))
 	self.ContentFrame.Position = UDim2.new(0, 0, 0, contentY)
 	self.ContentFrame.BackgroundColor3 = t.Colors.Bg
@@ -254,20 +243,56 @@ function MainWindow:BuildUI()
 	self.ContentFrame.ClipsDescendants = true
 	self.ContentFrame.Parent = root
 
-	self.FilesPanel = Instance.new("Frame")
+	self.FilesPanel = W("Frame")
 	self.FilesPanel.Size = UDim2.new(1, 0, 1, 0)
 	self.FilesPanel.BackgroundTransparency = 1
 	self.FilesPanel.Parent = self.ContentFrame
 	self.FileTree = FileTree.new(self.FilesPanel)
 
-	self.ActivityPanel = Instance.new("Frame")
+	self.ActivityPanel = W("Frame")
 	self.ActivityPanel.Size = UDim2.new(1, 0, 1, 0)
 	self.ActivityPanel.BackgroundTransparency = 1
 	self.ActivityPanel.Visible = false
 	self.ActivityPanel.Parent = self.ContentFrame
 	self.ActivityLog = ActivityLog.new(self.ActivityPanel)
 
-	-- === STATUS BAR ===
+	-- Notification toast
+	self.Toast = W("Frame")
+	self.Toast.Size = UDim2.new(1, -16, 0, 28)
+	self.Toast.Position = UDim2.new(0, 8, 1, -(t.Sizes.StatusBarH + 34))
+	self.Toast.BackgroundColor3 = t.Colors.BgCard
+	self.Toast.BorderSizePixel = 1
+	self.Toast.BorderColor3 = t.Colors.Border
+	self.Toast.Visible = false
+	self.Toast.ZIndex = 10
+	self.Toast.Parent = root
+	Instance.new("UICorner", self.Toast).CornerRadius = t.Radius.Sm
+
+	self.ToastIcon = W("TextLabel")
+	self.ToastIcon.Size = UDim2.new(0, 14, 1, 0)
+	self.ToastIcon.Position = UDim2.new(0, 8, 0, 0)
+	self.ToastIcon.BackgroundTransparency = 1
+	self.ToastIcon.Text = ""
+	self.ToastIcon.Font = t.Fonts.Body
+	self.ToastIcon.TextSize = 12
+	self.ToastIcon.ZIndex = 11
+	self.ToastIcon.Parent = self.Toast
+
+	self.ToastText = W("TextLabel")
+	self.ToastText.Size = UDim2.new(1, -28, 1, 0)
+	self.ToastText.Position = UDim2.new(0, 24, 0, 0)
+	self.ToastText.BackgroundTransparency = 1
+	self.ToastText.Text = ""
+	self.ToastText.TextColor3 = t.Colors.Text
+	self.ToastText.Font = t.Fonts.Body
+	self.ToastText.TextSize = t.Sizes.Small
+	self.ToastText.TextXAlignment = Enum.TextXAlignment.Left
+	self.ToastText.ZIndex = 11
+	self.ToastText.Parent = self.Toast
+
+	self.ToastTimer = nil
+
+	-- Status bar
 	self.StatusBar = StatusBar.new(root)
 	self.StatusBar:OnUndo(function() self.OnUndoRequested:Fire() end)
 	self.StatusBar:EnableUndo(false)
@@ -275,11 +300,11 @@ function MainWindow:BuildUI()
 	self.Root = root
 end
 
-function MainWindow:CreateTab(parent, label, id, x, y)
+function MainWindow:MakeTab(parent, label, id, x)
 	local t = Theme
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0, 100, 0, t.Sizes.TabH - 4)
-	btn.Position = UDim2.new(0, x, 0, y)
+	btn.Size = UDim2.new(0, 70, 0, t.Sizes.TabH - 4)
+	btn.Position = UDim2.new(0, x, 0, 2)
 	btn.BackgroundTransparency = 1
 	btn.Text = label
 	btn.TextColor3 = t.Colors.TextDim
@@ -291,28 +316,41 @@ function MainWindow:CreateTab(parent, label, id, x, y)
 	btn.MouseEnter:Connect(function() if self.ActiveTab ~= id then btn.TextColor3 = t.Colors.TextMuted end end)
 	btn.MouseLeave:Connect(function() if self.ActiveTab ~= id then btn.TextColor3 = t.Colors.TextDim end end)
 
-	if id == "files" then self.FilesTabBtn = btn
-	else self.ActivityTabBtn = btn end
+	if id == "files" then self.FilesTabBtn = btn else self.ActivityTabBtn = btn end
 end
 
 function MainWindow:SwitchTab(id)
 	if self.ActiveTab == id then return end
-	local t = Theme
 	self.ActiveTab = id
-
 	if id == "files" then
-		self.FilesTabBtn.TextColor3 = t.Colors.TextBright
-		self.ActivityTabBtn.TextColor3 = t.Colors.TextDim
+		self.FilesTabBtn.TextColor3 = Theme.Colors.TextBright
+		self.ActivityTabBtn.TextColor3 = Theme.Colors.TextDim
 		self.TabInd.Position = UDim2.new(0, 10, 1, -1)
 		self.FilesPanel.Visible = true
 		self.ActivityPanel.Visible = false
 	else
-		self.ActivityTabBtn.TextColor3 = t.Colors.TextBright
-		self.FilesTabBtn.TextColor3 = t.Colors.TextDim
-		self.TabInd.Position = UDim2.new(0, 120, 1, -1)
+		self.ActivityTabBtn.TextColor3 = Theme.Colors.TextBright
+		self.FilesTabBtn.TextColor3 = Theme.Colors.TextDim
+		self.TabInd.Position = UDim2.new(0, 90, 1, -1)
 		self.FilesPanel.Visible = false
 		self.ActivityPanel.Visible = true
 	end
+end
+
+function MainWindow:ShowToast(icon, text, color, duration)
+	local t = Theme
+	if self.ToastTimer then self.ToastTimer:Disconnect() end
+
+	self.ToastIcon.Text = icon
+	self.ToastIcon.TextColor3 = color or t.Colors.Text
+	self.ToastText.Text = text
+	self.Toast.BackgroundColor3 = t.Colors.BgCard
+	self.Toast.Visible = true
+
+	self.ToastTimer = task.delay(duration or 3, function()
+		self.Toast.Visible = false
+		self.ToastTimer = nil
+	end)
 end
 
 function MainWindow:Show() self.Widget.Enabled = true; self.IsVisible = true; self.Plugin:SetSetting("Rune_IsOpen", "true") end
@@ -324,19 +362,15 @@ function MainWindow:SetConnectionState(connected)
 		self.ConnectBtn.Text = "Disconnect"
 		self.ConnectBtn.BackgroundColor3 = Theme.Colors.Error
 		self.ConnDot.BackgroundColor3 = Theme.Colors.Success
-		self.ConnLabel.Text = "Connected"
-		self.ConnLabel.TextColor3 = Theme.Colors.Success
 	else
 		self.ConnectBtn.Text = "Connect"
 		self.ConnectBtn.BackgroundColor3 = Theme.Colors.Accent
 		self.ConnDot.BackgroundColor3 = Theme.Colors.TextDim
-		self.ConnLabel.Text = "Disconnected"
-		self.ConnLabel.TextColor3 = Theme.Colors.TextDim
 	end
 	self.StatusBar:SetConnectionState(connected)
 end
 
-function MainWindow:SetStatus(text, color) self.StatusBar:SetStatus(text, color) end
+function MainWindow:SetStatus(t, c) self.StatusBar:SetStatus(t, c) end
 function MainWindow:SetInstanceCount(n) self.StatusBar:SetInstanceCount(n) end
 function MainWindow:UpdateFileTree(d) self.FileTree:UpdateTree(d) end
 function MainWindow:AddFileNode(p, d) self.FileTree:AddNode(p, d) end
