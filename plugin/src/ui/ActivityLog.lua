@@ -54,11 +54,12 @@ function ActivityLog:AddEntry(cat, msg)
 	il.BackgroundTransparency = 1; il.Text = icon; il.TextColor3 = color
 	il.Font = t.Fonts.Body; il.TextSize = 10; il.Parent = f
 
-	local ml = Instance.new("TextLabel")
+	local ml = Instance.new("TextBox")
 	ml.Size = UDim2.new(1, -76, 1, 0); ml.Position = UDim2.new(0, 72, 0, 0)
 	ml.BackgroundTransparency = 1; ml.Text = msg; ml.TextColor3 = t.Colors.Text
 	ml.Font = t.Fonts.Mono; ml.TextSize = t.Sizes.Tiny; ml.TextXAlignment = Enum.TextXAlignment.Left
-	ml.TextTruncate = Enum.TextTruncate.AtEnd; ml.Parent = f
+	ml.TextTruncate = Enum.TextTruncate.AtEnd; ml.ClearTextOnFocus = false
+	ml.Parent = f
 
 	self.EntryFrames[idx] = f
 	self.Scroll.CanvasPosition = Vector2.new(0, 99999)

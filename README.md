@@ -1,4 +1,8 @@
-# Rune - Modern Roblox Development Toolkit
+# <img src="assets/logo.png" width="32" height="32"> Rune - Modern Roblox Development Toolkit
+
+<p align="center">
+  <img src="assets/logo.png" width="128" height="128" alt="Rune Logo">
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0--beta-blue" alt="Version">
