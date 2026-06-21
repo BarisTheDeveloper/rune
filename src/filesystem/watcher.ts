@@ -5,7 +5,7 @@
 
 import chokidar from "chokidar";
 import type { FSWatcher } from "chokidar";
-import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname, basename, extname } from "node:path";
 import type { InstanceDefinition, RobloxClassName } from "../types/index.js";
 import type { ScriptType } from "../utils/script-detector.js";
@@ -450,6 +450,14 @@ export class FileWatcher {
   private handleDirectoryAdd(relativePath: string): void {
     const parentId = this.getOrCreateFolderInstance(relativePath);
     logger.debug(`Directory created: ${relativePath}`);
+
+    // Notify Studio about new folder
+    if (parentId && this.onInstanceCreate) {
+      const folderInst = this.instanceTree.getInstance(parentId);
+      if (folderInst) {
+        this.onInstanceCreate(folderInst);
+      }
+    }
   }
 
   /**
@@ -658,18 +666,33 @@ export class FileWatcher {
       current = parent;
     }
 
-    // Generate extension suffix
-    let suffix = "";
-    if (instance.className === "ModuleScript") suffix = ".module";
-    else if (instance.className === "LocalScript") suffix = ".client";
-    else if (instance.className === "Script") suffix = ".server";
-
-    const fileName = `${instance.name}${suffix}.luau`;
-    const relativePath = join("src", ...pathParts.slice(1), fileName);
-
-    const fullPath = join(this.projectRoot, relativePath);
+    const relativeDir = join("src", ...pathParts.slice(1));
+    const fullDir = join(this.projectRoot, relativeDir);
 
     try {
+      // For folders, just create the directory
+      if (instance.className === "Folder") {
+        if (this.watcher) this.watcher.unwatch(fullDir);
+        if (!existsSync(fullDir)) {
+          mkdirSync(fullDir, { recursive: true });
+        }
+        this.fileToInstanceMap.set(relativeDir, instance.id);
+        this.instanceToFileMap.set(instance.id, relativeDir);
+        if (this.watcher) setTimeout(() => this.watcher?.add(fullDir), 500);
+        logger.success(`Studio → Dir: ${relativeDir}`);
+        return relativeDir;
+      }
+
+      // For scripts, create .luau file
+      let suffix = "";
+      if (instance.className === "ModuleScript") suffix = ".module";
+      else if (instance.className === "LocalScript") suffix = ".client";
+      else if (instance.className === "Script") suffix = ".server";
+
+      const fileName = `${instance.name}${suffix}.luau`;
+      const relativePath = join(relativeDir, fileName);
+      const fullPath = join(this.projectRoot, relativePath);
+
       if (this.watcher) this.watcher.unwatch(fullPath);
       writeFileSync(fullPath, instance.source || "", "utf-8");
 
@@ -683,7 +706,7 @@ export class FileWatcher {
       logger.success(`Studio → File: ${relativePath}`);
       return relativePath;
     } catch (error) {
-      logger.error(`Failed to create file: ${fullPath}`);
+      logger.error(`Failed to create: ${fullDir}`);
       return null;
     }
   }
