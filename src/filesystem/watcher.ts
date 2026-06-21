@@ -449,10 +449,10 @@ export class FileWatcher {
    */
   private handleDirectoryAdd(relativePath: string): void {
     const parentId = this.getOrCreateFolderInstance(relativePath);
-    logger.debug(`Directory created: ${relativePath}`);
 
-    // Notify Studio about new folder
-    if (parentId && this.onInstanceCreate) {
+    // Only broadcast if this is a genuinely new folder (not created by Studio sync)
+    const alreadyMapped = this.fileToInstanceMap.has(relativePath);
+    if (!alreadyMapped && parentId && this.onInstanceCreate) {
       const folderInst = this.instanceTree.getInstance(parentId);
       if (folderInst) {
         this.onInstanceCreate(folderInst);
