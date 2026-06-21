@@ -79,7 +79,7 @@ function scanDirectory(dirPath: string): RbxmxNode[] {
         name: entry,
         children,
       });
-    } else if (entry.endsWith(".lua")) {
+    } else if (entry.endsWith(".lua") || entry.endsWith(".luau")) {
       const source = readFileSync(fullPath, "utf-8");
       nodes.push({
         className: detectClassFromFile(fullPath),

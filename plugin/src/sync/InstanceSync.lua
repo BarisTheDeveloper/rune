@@ -500,6 +500,14 @@ function InstanceSync:SetupStudioListeners()
 		if isGuiElement(instance) then return end
 		if self:IsSyncedInstance(instance) then return end
 		self:NotifyInstanceCreated(instance)
+
+		-- Listen for source changes on scripts
+		if instance:IsA("LuaSourceContainer") then
+			instance:GetPropertyChangedSignal("Source"):Connect(function()
+				if not self.Enabled then return end
+				self:NotifyScriptSourceChanged(instance)
+			end)
+		end
 	end)
 
 	game.DescendantRemoving:Connect(function(instance)
@@ -536,8 +544,21 @@ function InstanceSync:NotifyInstanceDeleted(instance)
 			self.InstanceMap[id] = nil
 			self.WebSocket:Send({
 				type = "studio_instance_deleted",
-				data = { id = id },
+				data = { id = id, name = instance.Name },
 			})
+			break
+		end
+	end
+end
+
+function InstanceSync:NotifyScriptSourceChanged(instance)
+	for id, synced in pairs(self.InstanceMap) do
+		if synced == instance then
+			self.WebSocket:Send({
+				type = "studio_script_updated",
+				data = { id = id, name = instance.Name, source = instance.Source },
+			})
+			self.MainWindow:LogActivity("info", "Studio edit: " .. instance.Name)
 			break
 		end
 	end

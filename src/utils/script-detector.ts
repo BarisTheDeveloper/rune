@@ -56,8 +56,8 @@ export function detectScriptType(fileName: string): ScriptDetection {
     };
   }
 
-  // Default: if it's a .lua file without pattern, treat as regular Script
-  if (ext === ".lua") {
+  // Default: if it's a .lua or .luau file without pattern, treat as Script
+  if (ext === ".lua" || ext === ".luau") {
     return {
       fileName,
       scriptType: "Script",
@@ -112,17 +112,20 @@ export function getScriptExtension(
  * Check if a file is a script file
  */
 export function isScriptFile(fileName: string): boolean {
-  const ext = path.extname(fileName).toLowerCase();
-  if (ext !== ".lua" && ext !== ".ts") {
+  const lower = fileName.toLowerCase();
+  const ext = path.extname(lower);
+  // Support .lua, .luau, and .ts
+  if (ext !== ".lua" && ext !== ".luau" && ext !== ".ts") {
     return false;
   }
 
-  const nameWithoutExt = fileName.slice(0, -ext.length);
+  const nameWithoutExt = lower.slice(0, -ext.length);
   return (
     nameWithoutExt.endsWith(".module") ||
     nameWithoutExt.endsWith(".server") ||
     nameWithoutExt.endsWith(".client") ||
-    ext === ".lua"
+    ext === ".lua" ||
+    ext === ".luau"
   );
 }
 
