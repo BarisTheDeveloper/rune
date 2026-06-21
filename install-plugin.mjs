@@ -14,3 +14,7 @@ if (!existsSync(robloxPlugins)) {
 const destPath = join(robloxPlugins, 'RunePlugin.rbxmx');
 copyFileSync(pluginPath, destPath);
 console.log('Installed to:', destPath);
+
+// Also copy to repo root for GitHub Releases
+copyFileSync(pluginPath, './RunePlugin.rbxmx');
+console.log('Repo copy: ./RunePlugin.rbxmx');
