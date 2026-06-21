@@ -5,7 +5,7 @@
 
 import chokidar from "chokidar";
 import type { FSWatcher } from "chokidar";
-import { readFileSync, writeFileSync, unlinkSync, rmdirSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, rmSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname, basename, extname } from "node:path";
 import type { InstanceDefinition, RobloxClassName } from "../types/index.js";
 import type { ScriptType } from "../utils/script-detector.js";
@@ -732,7 +732,7 @@ export class FileWatcher {
       if (this.watcher) this.watcher.unwatch(fullPath);
 
       if (isDir) {
-        rmdirSync(fullPath, { recursive: true });
+        rmSync(fullPath, { recursive: true });
         logger.success(`Studio → Deleted dir: ${relativePath}`);
       } else {
         unlinkSync(fullPath);

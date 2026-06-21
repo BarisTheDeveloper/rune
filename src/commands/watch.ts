@@ -123,7 +123,12 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
       const instance = instanceTree.getInstance(instanceId);
       if (instance) {
         logger.info(`Studio updated script: ${instance.name}`);
-        fileWatcher.writeScriptSource(instanceId, source as string);
+        const ok = fileWatcher.writeScriptSource(instanceId, source as string);
+        if (ok) {
+          logger.success(`Studio → File: ${instance.name}`);
+        }
+      } else {
+        logger.warn(`Studio script update for unknown instance: ${instanceId}`);
       }
     });
 
