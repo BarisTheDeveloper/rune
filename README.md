@@ -6,7 +6,7 @@
 <p align="center"><em>Modern Roblox Development Toolkit — A Rojo alternative</em></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/roblox-sync-orange?style=flat-square" alt="Roblox Sync">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform">
