@@ -49,6 +49,7 @@ export class FileWatcher {
   private instanceTree: InstanceTree;
   private projectRoot: string;
   private isWatching: boolean = false;
+  private isInitialScan = true;
 
   // Event callbacks
   private onFileChange?: (event: FileChangeEvent) => void;
@@ -125,7 +126,7 @@ export class FileWatcher {
 
     this.watcher = chokidar.watch(watchPaths, {
       persistent: true,
-      ignoreInitial: false,
+      ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 100,
         pollInterval: 50,
