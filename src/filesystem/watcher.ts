@@ -722,16 +722,20 @@ export class FileWatcher {
   public deleteFileForInstance(instanceId: string): void {
     const relativePath = this.instanceToFileMap.get(instanceId);
     if (!relativePath) {
-      logger.warn(`No file mapping for deleted instance: ${instanceId}`);
-      return;
+      return; // silent — instance may not have file mapping
     }
 
     const fullPath = join(this.projectRoot, relativePath);
+    if (!existsSync(fullPath)) {
+      // File already deleted (e.g., rename), just clean up maps
+      this.fileToInstanceMap.delete(relativePath);
+      this.instanceToFileMap.delete(instanceId);
+      return;
+    }
+
     try {
-      const isDir = existsSync(fullPath) && statSync(fullPath).isDirectory();
-
+      const isDir = statSync(fullPath).isDirectory();
       if (this.watcher) this.watcher.unwatch(fullPath);
-
       if (isDir) {
         rmSync(fullPath, { recursive: true });
         logger.success(`Studio → Deleted dir: ${relativePath}`);
@@ -739,7 +743,6 @@ export class FileWatcher {
         unlinkSync(fullPath);
         logger.success(`Studio → Deleted: ${relativePath}`);
       }
-
       this.fileToInstanceMap.delete(relativePath);
       this.instanceToFileMap.delete(instanceId);
     } catch (error) {
