@@ -144,12 +144,7 @@ function MainWindow:BuildUI()
 	self.ConnectBtn.Parent = connCard
 	Instance.new("UICorner", self.ConnectBtn).CornerRadius = t.Radius.Sm
 
-	self.ConnectBtn.MouseButton1Click:Connect(function()
-		if self.IsConnected then self.OnDisconnectRequested:Fire()
-		else self.OnConnectRequested:Fire(self.HostInput.Text, tonumber(self.PortInput.Text) or 34872) end
-	end)
-
-	-- Connection status indicator (pulse dot)
+	-- Connection status dot + label
 	self.ConnDot = Instance.new("Frame")
 	self.ConnDot.Size = UDim2.new(0, 6, 0, 6)
 	self.ConnDot.Position = UDim2.new(0, 8, 0, 6)
@@ -158,7 +153,6 @@ function MainWindow:BuildUI()
 	self.ConnDot.Parent = connCard
 	Instance.new("UICorner", self.ConnDot).CornerRadius = UDim.new(1, 0)
 
-	-- Status text in card
 	self.ConnLabel = Instance.new("TextLabel")
 	self.ConnLabel.Size = UDim2.new(0, 120, 0, 12)
 	self.ConnLabel.Position = UDim2.new(0, 18, 0, 3)
@@ -169,6 +163,58 @@ function MainWindow:BuildUI()
 	self.ConnLabel.TextSize = t.Sizes.Tiny
 	self.ConnLabel.TextXAlignment = Enum.TextXAlignment.Left
 	self.ConnLabel.Parent = connCard
+
+	self.ConnectBtn.MouseButton1Click:Connect(function()
+		if self.IsConnected then self.OnDisconnectRequested:Fire()
+		else self.OnConnectRequested:Fire(self.HostInput.Text, tonumber(self.PortInput.Text) or 34872) end
+	end)
+
+	-- Quick actions row
+	local actionsFrame = Instance.new("Frame")
+	actionsFrame.Size = UDim2.new(1, 0, 0, 16)
+	actionsFrame.Position = UDim2.new(0, 8, 0, 46 + t.Sizes.ConnBarH + 10)
+	actionsFrame.BackgroundTransparency = 1
+	actionsFrame.Parent = root
+
+	local function makeActionBtn(text, x)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(0, 70, 0, 16)
+		b.Position = UDim2.new(0, x, 0, 0)
+		b.BackgroundColor3 = t.Colors.BgCard; b.BorderSizePixel = 1; b.BorderColor3 = t.Colors.Border
+		b.Text = text; b.TextColor3 = t.Colors.TextDim; b.Font = t.Fonts.Tiny; b.TextSize = t.Sizes.Tiny
+		b.AutoButtonColor = false
+		b.Parent = actionsFrame
+		Instance.new("UICorner", b).CornerRadius = t.Radius.Xs
+		b.MouseEnter:Connect(function() b.BackgroundColor3 = t.Colors.BgHover; b.TextColor3 = t.Colors.TextMuted end)
+		b.MouseLeave:Connect(function() b.BackgroundColor3 = t.Colors.BgCard; b.TextColor3 = t.Colors.TextDim end)
+		return b
+	end
+
+	local syncBtn = makeActionBtn("↻ Sync", 0)
+	syncBtn.MouseButton1Click:Connect(function()
+		if syncHandler then syncHandler:RequestSync() end
+	end)
+
+	local expandBtn = makeActionBtn("⊞ All", 76)
+	expandBtn.MouseButton1Click:Connect(function()
+		if self.FileTree then
+			for id, _ in pairs(self.FileTree.Nodes) do
+				self.FileTree.ExpandedNodes[id] = true
+			end
+			self.FileTree:Refresh()
+		end
+	end)
+
+	local collapseBtn = makeActionBtn("⊟ All", 152)
+	collapseBtn.MouseButton1Click:Connect(function()
+		if self.FileTree then
+			self.FileTree.ExpandedNodes = {}
+			self.FileTree:Refresh()
+		end
+	end)
+
+	-- Adjust tab bar Y
+	tabY = 46 + t.Sizes.ConnBarH + 30
 
 	-- === TAB BAR ===
 	local tabY = 46 + t.Sizes.ConnBarH + 14
