@@ -1,0 +1,2045 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<roblox version="4">
+  <Item class="Folder" referent="RBX00000001">
+    <Properties>
+      <string name="Name">RunePlugin</string>
+    </Properties>
+    <Item class="Script" referent="RBX00000002">
+      <Properties>
+        <string name="Name">main</string>
+        <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin v3 — Minimal + Toast Notifications
+]]
+
+local RunService = game:GetService("RunService")
+
+-- Plugin setup
+local toolbar = plugin:CreateToolbar("Rune")
+local toggleButton = toolbar:CreateButton("◆ RUNE", "Toggle Rune Panel", "rbxassetid://6031071053")
+
+-- Load modules
+local Theme = require(script.Parent.utils.Theme)
+local WebSocketClient = require(script.Parent.sync.WebSocketClient)
+local InstanceSync = require(script.Parent.sync.InstanceSync)
+local MainWindow = require(script.Parent.ui.MainWindow)
+
+-- State
+local isOpen = false
+local mainWindow = nil
+local wsClient = nil
+local syncHandler = nil
+
+local function log(cat, msg)
+	if mainWindow then mainWindow:LogActivity(cat, msg) end
+	print("[Rune] " .. msg)
+end
+
+-- Initialize
+local function initialize()
+	mainWindow = MainWindow.new(plugin)
+	log("info", "◆ RUNE v3 loaded")
+
+	mainWindow.OnConnectRequested:Connect(function(host, port)
+		connectToRune(host, port)
+	end)
+	mainWindow.OnDisconnectRequested:Connect(function()
+		disconnectFromRune()
+	end)
+	mainWindow.OnSyncToggle:Connect(function(enabled)
+		if syncHandler then
+			syncHandler:SetEnabled(enabled)
+			log("info", enabled and "Sync resumed" or "Sync paused")
+		end
+	end)
+	mainWindow.OnUndoRequested:Connect(function()
+		if syncHandler then
+			local ok = syncHandler:UndoLastChange()
+			if ok then
+				mainWindow:SetStatus("Undo", Theme.Colors.Warning)
+				mainWindow:ShowToast("↩", "Last change undone", Theme.Colors.Warning, 2)
+			end
+		end
+	end)
+end
+
+function connectToRune(host, port)
+	disconnectFromRune()
+
+	mainWindow:SetStatus("Connecting...", Theme.Colors.Warning)
+	log("sync", "Connecting to " .. host .. ":" .. port)
+
+	wsClient = WebSocketClient.new(host, port)
+	syncHandler = InstanceSync.new(wsClient, mainWindow)
+
+	wsClient.OnModeChanged:Connect(function(mode)
+		local label = mode == "ws" and "WebSocket" or "HTTP Polling"
+		log("info", "Transport: " .. label)
+	end)
+
+	wsClient.OnConnected:Connect(function()
+		mainWindow:SetStatus("Connected", Theme.Colors.Success)
+		mainWindow:SetConnectionState(true)
+		local mode = wsClient.IsPolling and "HTTP" or "WS"
+		log("success", "Connected via " .. mode)
+		mainWindow:ShowToast("✓", "Connected to " .. host .. ":" .. port, Theme.Colors.Success, 3)
+		syncHandler:RequestSync()
+	end)
+
+	wsClient.OnDisconnected:Connect(function()
+		mainWindow:SetStatus("Disconnected", Theme.Colors.Error)
+		mainWindow:SetConnectionState(false)
+		log("warn", "Disconnected")
+		mainWindow:ShowToast("✗", "Disconnected from server", Theme.Colors.Error, 3)
+	end)
+
+	wsClient.OnMessageReceived:Connect(function(message)
+		syncHandler:HandleMessage(message)
+	end)
+
+	wsClient.OnError:Connect(function(err)
+		local msg = tostring(err)
+		mainWindow:SetStatus("Error", Theme.Colors.Error)
+		log("error", msg)
+		mainWindow:ShowToast("⚠", msg, Theme.Colors.Warning, 4)
+	end)
+
+	wsClient:Connect()
+end
+
+function disconnectFromRune()
+	if wsClient then wsClient:Disconnect(); wsClient = nil; log("info", "Disconnected") end
+	if syncHandler then syncHandler:Destroy(); syncHandler = nil end
+	if mainWindow then
+		mainWindow:SetStatus("Disconnected", Theme.Colors.TextMuted)
+		mainWindow:SetConnectionState(false)
+		mainWindow:SetInstanceCount(0)
+		mainWindow:EnableUndo(false)
+	end
+end
+
+-- InstanceSync toast hooks
+local origFullSync = InstanceSync.HandleFullSync
+InstanceSync.HandleFullSync = function(self, data)
+	origFullSync(self, data)
+	if mainWindow then
+		local count = data and data.count or 0
+		mainWindow:ShowToast("✓", "Synced " .. count .. " instances", Theme.Colors.Success, 3)
+	end
+end
+
+local origCreated = InstanceSync.HandleInstanceCreated
+InstanceSync.HandleInstanceCreated = function(self, data)
+	origCreated(self, data)
+	if mainWindow then
+		mainWindow:ShowToast("+", data and data.name or "Created", Theme.Colors.Success, 2)
+	end
+end
+
+local origDeleted = InstanceSync.HandleInstanceDeleted
+InstanceSync.HandleInstanceDeleted = function(self, data)
+	origDeleted(self, data)
+	if mainWindow then
+		mainWindow:ShowToast("−", data and data.name or "Deleted", Theme.Colors.Warning, 2)
+	end
+end
+
+-- Toggle
+toggleButton.Click:Connect(function()
+	isOpen = not isOpen
+	if isOpen then
+		if not mainWindow then initialize() end
+		mainWindow:Show()
+	else
+		if mainWindow then mainWindow:Hide() end
+	end
+	toggleButton:SetActive(isOpen)
+end)
+
+-- Cleanup
+plugin.Unloading:Connect(function()
+	disconnectFromRune()
+	if mainWindow then mainWindow:Destroy() end
+end)
+
+-- Auto-open
+if plugin:GetSetting("Rune_IsOpen") == "true" then
+	isOpen = true
+	initialize()
+	mainWindow:Show()
+	toggleButton:SetActive(true)
+end
+
+print("[Rune] ◆ RUNE v3 ready")
+]]></ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000003">
+      <Properties>
+        <string name="Name">ReplicatedStorage</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000004">
+        <Properties>
+          <string name="Name">Shared</string>
+          <ProtectedString name="Source"><![CDATA[-- Shared Module
+-- Created by Rune
+
+local Shared = {}
+
+-- Add your shared code here
+
+return Shared
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000005">
+      <Properties>
+        <string name="Name">ServerScriptService</string>
+      </Properties>
+      <Item class="Script" referent="RBX00000006">
+        <Properties>
+          <string name="Name">Main</string>
+          <ProtectedString name="Source"><![CDATA[-- Main Server Script
+-- Created by Rune
+
+print("Hello from Rune!")
+
+-- Your server-side code here
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000007">
+      <Properties>
+        <string name="Name">StarterPlayer</string>
+      </Properties>
+      <Item class="Folder" referent="RBX00000008">
+        <Properties>
+          <string name="Name">StarterPlayerScripts</string>
+        </Properties>
+        <Item class="LocalScript" referent="RBX00000009">
+          <Properties>
+            <string name="Name">Client</string>
+            <ProtectedString name="Source"><![CDATA[-- Client Script
+-- Created by Rune
+
+print("Hello from the client!")
+
+-- Your client-side code here
+]]></ProtectedString>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000010">
+      <Properties>
+        <string name="Name">sync</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000011">
+        <Properties>
+          <string name="Name">InstanceSync</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Instance Sync with Undo Support
+	Handles bidirectional synchronization + change history for rollback
+]]
+
+local HttpService = game:GetService("HttpService")
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
+
+local InstanceSync = {}
+InstanceSync.__index = InstanceSync
+
+local MAX_UNDO = 20
+
+local SERVICE_MAP = {
+	Workspace = game.Workspace,
+	Players = game.Players,
+	Lighting = game.Lighting,
+	MaterialService = game.MaterialService,
+	ReplicatedFirst = game.ReplicatedFirst,
+	ReplicatedStorage = game.ReplicatedStorage,
+	ServerScriptService = game.ServerScriptService,
+	ServerStorage = game.ServerStorage,
+	StarterGui = game.StarterGui,
+	StarterPack = game.StarterPack,
+	StarterPlayer = game.StarterPlayer,
+	SoundService = game.SoundService,
+	Teams = game.Teams,
+	TextChatService = game.TextChatService,
+	Chat = game.Chat,
+	LocalizationService = game.LocalizationService,
+}
+
+function InstanceSync.new(webSocketClient, mainWindow)
+	local self = setmetatable({}, InstanceSync)
+
+	self.WebSocket = webSocketClient
+	self.MainWindow = mainWindow
+	self.Enabled = true
+	self.InstanceMap = {}
+	self.PendingChanges = {}
+	self.UndoStack = {}
+	self.InstanceCount = 0
+
+	self:SetupStudioListeners()
+
+	return self
+end
+
+function InstanceSync:SetEnabled(enabled)
+	self.Enabled = enabled
+end
+
+function InstanceSync:RequestSync()
+	if not self.Enabled then return end
+	self.MainWindow:LogActivity("info", "Requesting full sync...")
+	self.WebSocket:Send({
+		type = "request_sync",
+		timestamp = os.time(),
+	})
+end
+
+function InstanceSync:HandleMessage(message)
+	if not self.Enabled then return end
+
+	local msgType = message.type
+
+	if msgType == "full_sync" then
+		self:HandleFullSync(message.data)
+	elseif msgType == "instance_created" then
+		self:HandleInstanceCreated(message.data)
+	elseif msgType == "instance_updated" then
+		self:HandleInstanceUpdated(message.data)
+	elseif msgType == "instance_deleted" then
+		self:HandleInstanceDeleted(message.data)
+	elseif msgType == "instance_moved" then
+		self:HandleInstanceMoved(message.data)
+	elseif msgType == "instance_renamed" then
+		self:HandleInstanceRenamed(message.data)
+	elseif msgType == "property_changed" then
+		self:HandlePropertyChanged(message.data)
+	elseif msgType == "script_source" then
+		self:HandleScriptSource(message.data)
+	elseif msgType == "sync_complete" then
+		local count = message.data and message.data.count or 0
+		self.MainWindow:SetStatus("Sync complete", nil)
+		self.MainWindow:SetInstanceCount(count)
+		self.MainWindow:LogActivity("success", "Sync complete — " .. count .. " instances")
+	elseif msgType == "error" then
+		warn("[Rune] Server error: " .. tostring(message.error))
+		self.MainWindow:LogActivity("error", "Server: " .. tostring(message.error))
+	end
+end
+
+function InstanceSync:HandleFullSync(data)
+	self.MainWindow:LogActivity("sync", "Receiving full sync...")
+	self.MainWindow:SetStatus("Syncing...", nil)
+
+	self.InstanceMap = {}
+
+	if data.instances then
+		-- Sort: root instances (parentId=nil) first, then children
+		table.sort(data.instances, function(a, b)
+			local aIsRoot = (a.parentId == nil)
+			local bIsRoot = (b.parentId == nil)
+			if aIsRoot and not bIsRoot then return true end
+			if not aIsRoot and bIsRoot then return false end
+			return false
+		end)
+
+		for _, instanceData in ipairs(data.instances) do
+			self:CreateOrUpdateInstance(instanceData, true)
+		end
+	end
+
+	-- Build nested tree for UI from flat list
+	local treeData = self:BuildTreeFromFlatList(data.instances or {}, data.rootIds or {})
+	self.MainWindow:LogActivity("info", "[DEBUG] Tree built, " .. #treeData .. " roots, updating UI...")
+	self.MainWindow:UpdateFileTree(treeData)
+
+	local count = data.count or #data.instances
+	self.InstanceCount = count
+	self.MainWindow:SetInstanceCount(count)
+	self.MainWindow:SetStatus("Sync complete — " .. count .. " instances", nil)
+	self.MainWindow:LogActivity("success", "Full sync: " .. count .. " instances loaded")
+end
+
+-- Build nested tree structure from flat instance list
+function InstanceSync:BuildTreeFromFlatList(instances, rootIds)
+	-- Build lookup by id
+	local lookup = {}
+	for _, inst in ipairs(instances) do
+		lookup[inst.id] = inst
+	end
+
+	-- Attach children as full objects
+	local roots = {}
+	for _, inst in ipairs(instances) do
+		if inst.children and #inst.children > 0 then
+			local fullChildren = {}
+			for _, childId in ipairs(inst.children) do
+				if lookup[childId] then
+					table.insert(fullChildren, lookup[childId])
+				end
+			end
+			inst.children = fullChildren
+		else
+			inst.children = {}
+		end
+
+		if inst.parentId == nil then
+			table.insert(roots, inst)
+		end
+	end
+
+	return roots
+end
+
+function InstanceSync:HandleInstanceCreated(data)
+	local instance = self:CreateOrUpdateInstance(data)
+	if instance then
+		self.MainWindow:AddFileNode(data.parentId, data)
+		self.InstanceCount = self.InstanceCount + 1
+		self.MainWindow:SetInstanceCount(self.InstanceCount)
+		self.MainWindow:LogActivity("success", "Created: " .. (data.name or "?") .. " (" .. (data.className or "?") .. ")")
+	end
+end
+
+function InstanceSync:HandleInstanceUpdated(data)
+	-- Save undo state before modifying
+	self:PushUndo(data.id or data.name, data)
+
+	local instance = self:CreateOrUpdateInstance(data)
+	if instance then
+		self.MainWindow:LogActivity("info", "Updated: " .. (data.name or "?"))
+		self.MainWindow:EnableUndo(true)
+	end
+end
+
+function InstanceSync:HandleInstanceDeleted(data)
+	local id = data.id
+	local instance = self.InstanceMap[id]
+
+	if instance and instance.Parent then
+		self:PushUndo(id, { id = id, name = instance.Name, className = instance.ClassName })
+		instance:Destroy()
+	end
+
+	self.InstanceMap[id] = nil
+	self.MainWindow:RemoveFileNode(id)
+	self.InstanceCount = math.max(0, self.InstanceCount - 1)
+	self.MainWindow:SetInstanceCount(self.InstanceCount)
+	self.MainWindow:LogActivity("warn", "Deleted: " .. (data.name or id))
+	self.MainWindow:EnableUndo(true)
+end
+
+function InstanceSync:HandleInstanceMoved(data)
+	local instance = self.InstanceMap[data.id]
+	if not instance then return end
+
+	local oldParent = instance.Parent
+	local newParent = self:FindParent(data.newParentId)
+
+	if newParent then
+		self:PushUndo(data.id, { id = data.id, name = instance.Name, oldParentId = oldParent and oldParent.Name })
+		instance.Parent = newParent
+		self.MainWindow:LogActivity("info", "Moved: " .. instance.Name)
+		self.MainWindow:EnableUndo(true)
+	end
+end
+
+function InstanceSync:HandleInstanceRenamed(data)
+	local instance = self.InstanceMap[data.id]
+	if instance then
+		local oldName = instance.Name
+		self:PushUndo(data.id, { id = data.id, oldName = oldName })
+		instance.Name = data.newName
+		self.MainWindow:LogActivity("info", "Renamed: " .. oldName .. " → " .. data.newName)
+		self.MainWindow:EnableUndo(true)
+	end
+end
+
+function InstanceSync:HandlePropertyChanged(data)
+	local instance = self.InstanceMap[data.instanceId or data.id]
+	if not instance then return end
+
+	local propName = data.property
+	local propValue = data.value
+
+	-- Save old value for undo
+	local oldValue = nil
+	pcall(function() oldValue = instance[propName] end)
+	self:PushUndo(data.instanceId or data.id, {
+		id = data.instanceId or data.id,
+		property = propName,
+		oldValue = oldValue,
+		newValue = propValue,
+	})
+
+	pcall(function()
+		instance[propName] = propValue
+	end)
+	self.MainWindow:LogActivity("info", "Property: " .. (instance.Name or "?") .. "." .. propName)
+	self.MainWindow:EnableUndo(true)
+end
+
+function InstanceSync:HandleScriptSource(data)
+	local instance = self.InstanceMap[data.id]
+	if not instance then return end
+
+	if instance:IsA("LuaSourceContainer") then
+		local oldSource = instance.Source
+		self:PushUndo(data.id, {
+			id = data.id,
+			oldSource = oldSource,
+			newSource = data.source,
+		})
+		instance.Source = data.source
+		self.MainWindow:LogActivity("info", "Script updated: " .. instance.Name)
+		self.MainWindow:EnableUndo(true)
+	end
+end
+function InstanceSync:CreateOrUpdateInstance(data, isInitialSync)
+	if not self.Enabled then return nil end
+
+	-- Check if already in our map
+	local existing = self.InstanceMap[data.id]
+	if existing then
+		self:UpdateInstance(existing, data)
+		return existing
+	end
+
+	local parent = self:FindParent(data.parentId)
+	if not parent then
+		parent = SERVICE_MAP[data.parentName]
+	end
+
+	-- For root instances: if name is a Roblox service, use it directly (skip creating folder)
+	if not parent and data.parentId == nil then
+		parent = SERVICE_MAP[data.name]
+		if parent then
+			self.InstanceMap[data.id] = parent
+			return parent
+		end
+	end
+
+	if not parent then
+		if not isInitialSync then
+			warn("[Rune] Parent not found for: " .. tostring(data.name))
+		end
+		return nil
+	end
+
+	-- Check if an instance with this name already exists under the parent
+	local existingChild = parent:FindFirstChild(data.name)
+	if existingChild then
+		-- Update existing instead of creating duplicate
+		self.InstanceMap[data.id] = existingChild
+		if data.source and existingChild:IsA("LuaSourceContainer") then
+			existingChild.Source = data.source
+		end
+		self:UpdateInstance(existingChild, data)
+		return existingChild
+	end
+
+	-- Create new instance
+	local className = data.className or "Folder"
+	local instance = nil
+
+	local success = pcall(function()
+		if className == "Script" or className == "LocalScript" or className == "ModuleScript" then
+			instance = Instance.new(className)
+		elseif className == "Folder" then
+			instance = Instance.new("Folder")
+		elseif className == "Model" then instance = Instance.new("Model")
+		elseif className == "Part" then instance = Instance.new("Part")
+		elseif className == "MeshPart" then instance = Instance.new("MeshPart")
+		elseif className == "ScreenGui" then instance = Instance.new("ScreenGui")
+		elseif className == "Frame" then instance = Instance.new("Frame")
+		elseif className == "TextLabel" then instance = Instance.new("TextLabel")
+		elseif className == "TextButton" then instance = Instance.new("TextButton")
+		elseif className == "ImageLabel" then instance = Instance.new("ImageLabel")
+		elseif className == "Sound" then instance = Instance.new("Sound")
+		elseif className == "Animation" then instance = Instance.new("Animation")
+		elseif className == "IntValue" then instance = Instance.new("IntValue")
+		elseif className == "StringValue" then instance = Instance.new("StringValue")
+		elseif className == "BoolValue" then instance = Instance.new("BoolValue")
+		elseif className == "NumberValue" then instance = Instance.new("NumberValue")
+		elseif className == "Color3Value" then instance = Instance.new("Color3Value")
+		elseif className == "Vector3Value" then instance = Instance.new("Vector3Value")
+		else instance = Instance.new("Folder")
+		end
+	end)
+
+	if not success or not instance then
+		warn("[Rune] Failed to create: " .. tostring(className))
+		return nil
+	end
+
+	instance.Name = data.name or "NewInstance"
+
+	if data.properties then
+		for propName, propData in pairs(data.properties) do
+			pcall(function()
+				if typeof(propData) == "table" and propData.value ~= nil then
+					instance[propName] = propData.value
+				else
+					instance[propName] = propData
+				end
+			end)
+		end
+	end
+
+	if data.source and instance:IsA("LuaSourceContainer") then
+		instance.Source = data.source
+	end
+
+	if data.attributes then
+		for attrName, attrValue in pairs(data.attributes) do
+			pcall(function() instance:SetAttribute(attrName, attrValue) end)
+		end
+	end
+
+	if data.tags then
+		for _, tag in ipairs(data.tags) do
+			pcall(function() instance:AddTag(tag) end)
+		end
+	end
+
+	instance.Parent = parent
+	self.InstanceMap[data.id] = instance
+
+	return instance
+end
+
+function InstanceSync:UpdateInstance(instance, data)
+	if data.name and instance.Name ~= data.name then
+		instance.Name = data.name
+	end
+
+	if data.properties then
+		for propName, propData in pairs(data.properties) do
+			pcall(function()
+				if typeof(propData) == "table" and propData.value ~= nil then
+					instance[propName] = propData.value
+				else
+					instance[propName] = propData
+				end
+			end)
+		end
+	end
+
+	if data.source and instance:IsA("LuaSourceContainer") then
+		instance.Source = data.source
+	end
+
+	if data.attributes then
+		for attrName, attrValue in pairs(data.attributes) do
+			pcall(function() instance:SetAttribute(attrName, attrValue) end)
+		end
+	end
+end
+
+function InstanceSync:FindParent(parentId)
+	if not parentId then return game end
+	return self.InstanceMap[parentId] or SERVICE_MAP[parentId]
+end
+
+-- ===== UNDO SYSTEM =====
+
+function InstanceSync:PushUndo(id, snapshot)
+	table.insert(self.UndoStack, {
+		id = id,
+		snapshot = snapshot,
+		timestamp = os.time(),
+	})
+
+	while #self.UndoStack > MAX_UNDO do
+		table.remove(self.UndoStack, 1)
+	end
+end
+
+function InstanceSync:UndoLastChange()
+	if #self.UndoStack == 0 then
+		self.MainWindow:LogActivity("warn", "Nothing to undo")
+		return false
+	end
+
+	local entry = table.remove(self.UndoStack)
+	local snap = entry.snapshot
+
+	self.MainWindow:LogActivity("sync", "Undoing: " .. (snap.name or snap.id or "?"))
+
+	-- Try to restore
+	local instance = self.InstanceMap[snap.id]
+	if not instance then
+		self.MainWindow:LogActivity("error", "Cannot undo: instance gone")
+		return false
+	end
+
+	-- Restore name
+	if snap.oldName then
+		instance.Name = snap.oldName
+		self.MainWindow:LogActivity("info", "Name restored: " .. snap.oldName)
+	end
+
+	-- Restore source
+	if snap.oldSource then
+		if instance:IsA("LuaSourceContainer") then
+			instance.Source = snap.oldSource
+			self.MainWindow:LogActivity("info", "Script source restored")
+		end
+	end
+
+	-- Restore property
+	if snap.oldValue ~= nil and snap.property then
+		pcall(function()
+			instance[snap.property] = snap.oldValue
+		end)
+		self.MainWindow:LogActivity("info", "Property restored: " .. snap.property)
+	end
+
+	-- Restore parent
+	if snap.oldParentId then
+		local oldParent = self:FindParent(snap.oldParentId)
+		if oldParent then
+			instance.Parent = oldParent
+			self.MainWindow:LogActivity("info", "Parent restored")
+		end
+	end
+
+	if #self.UndoStack == 0 then
+		self.MainWindow:EnableUndo(false)
+	end
+
+	return true
+end
+
+-- ===== STUDIO LISTENERS =====
+
+-- Check if instance is a GUI element that should NOT be synced
+local function isGuiElement(instance)
+	if instance:IsA("GuiObject") or instance:IsA("GuiBase2d") or instance:IsA("PluginGui") then
+		return true
+	end
+	local current = instance
+	while current do
+		if current:IsA("PluginGui") or current:IsA("PlayerGui")
+			or current:IsA("CoreGui") or current:IsA("StarterGui")
+			or current:IsA("PluginGui") then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+function InstanceSync:SetupStudioListeners()
+	game.DescendantAdded:Connect(function(instance)
+		if not self.Enabled then return end
+		if isGuiElement(instance) then return end
+		if self:IsSyncedInstance(instance) then return end
+		self:NotifyInstanceCreated(instance)
+	end)
+
+	game.DescendantRemoving:Connect(function(instance)
+		if not self.Enabled then return end
+		if isGuiElement(instance) then return end
+		if not self:IsSyncedInstance(instance) then return end
+		self:NotifyInstanceDeleted(instance)
+	end)
+end
+
+function InstanceSync:IsSyncedInstance(instance)
+	for _, synced in pairs(self.InstanceMap) do
+		if synced == instance then return true end
+	end
+	return false
+end
+
+function InstanceSync:NotifyInstanceCreated(instance)
+	task.delay(0.5, function()
+		if not instance or not instance.Parent then return end
+		local data = self:SerializeInstance(instance)
+		if data then
+			self.WebSocket:Send({
+				type = "studio_instance_created",
+				data = data,
+			})
+		end
+	end)
+end
+
+function InstanceSync:NotifyInstanceDeleted(instance)
+	for id, synced in pairs(self.InstanceMap) do
+		if synced == instance then
+			self.InstanceMap[id] = nil
+			self.WebSocket:Send({
+				type = "studio_instance_deleted",
+				data = { id = id },
+			})
+			break
+		end
+	end
+end
+
+function InstanceSync:SerializeInstance(instance)
+	local className = instance.ClassName
+	local supported = {
+		Folder = true, Script = true, LocalScript = true, ModuleScript = true,
+		Model = true, Part = true, MeshPart = true, UnionOperation = true,
+		Decal = true, Texture = true, Sound = true, Animation = true,
+		ScreenGui = true, Frame = true, TextLabel = true, TextButton = true,
+		ImageLabel = true, ImageButton = true, IntValue = true,
+		StringValue = true, BoolValue = true, NumberValue = true,
+		Color3Value = true, Vector3Value = true, Configuration = true,
+	}
+	if not supported[className] then return nil end
+
+	-- Find parent info
+	local parentId = nil
+	local parentName = nil
+	if instance.Parent and instance.Parent ~= game then
+		-- Check if parent is in our InstanceMap
+		for id, synced in pairs(self.InstanceMap) do
+			if synced == instance.Parent then
+				parentId = id
+				parentName = synced.Name
+				break
+			end
+		end
+		-- Fallback: use parent name as service reference
+		if not parentId then
+			parentName = instance.Parent.Name
+		end
+	end
+
+	local data = {
+		name = instance.Name,
+		className = className,
+		parentId = parentId,
+		parentName = parentName,
+	}
+
+	if instance:IsA("LuaSourceContainer") then
+		data.source = instance.Source
+	end
+
+	local attributes = instance:GetAttributes()
+	if next(attributes) then data.attributes = attributes end
+
+	local tags = instance:GetTags()
+	if #tags > 0 then data.tags = tags end
+
+	return data
+end
+
+function InstanceSync:Destroy()
+	self.Enabled = false
+	self.InstanceMap = {}
+	self.UndoStack = {}
+end
+
+return InstanceSync
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000012">
+        <Properties>
+          <string name="Name">WebSocketClient</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - WebSocket Client v2
+	Robust dual-transport client with consistent session ID for polling
+]]
+
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local WebSocketClient = {}
+WebSocketClient.__index = WebSocketClient
+
+-- Simple signal
+local Signal = {}
+Signal.__index = Signal
+function Signal.new()
+	local self = setmetatable({}, Signal)
+	self._connections = {}
+	return self
+end
+function Signal:Connect(fn)
+	table.insert(self._connections, fn)
+	return { Disconnect = function()
+		for i, f in ipairs(self._connections) do if f == fn then table.remove(self._connections, i); break end end
+	end }
+end
+function Signal:Fire(...)
+	for _, fn in ipairs(self._connections) do task.spawn(fn, ...) end
+end
+
+-- Generate a random session ID
+local function generateId()
+	local chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	local id = "rune-"
+	for _ = 1, 16 do
+		id = id .. chars:sub(math.random(1, #chars), math.random(1, #chars))
+	end
+	return id
+end
+
+function WebSocketClient.new(host, port)
+	local self = setmetatable({}, WebSocketClient)
+
+	self.Host = host or "localhost"
+	self.Port = port or 34872
+	self.Connected = false
+	self.Socket = nil
+	self.ReconnectAttempts = 0
+	self.MaxReconnectAttempts = 10
+	self.ClientId = generateId()
+	self.IsPolling = false
+
+	-- Events
+	self.OnConnected = Signal.new()
+	self.OnDisconnected = Signal.new()
+	self.OnMessageReceived = Signal.new()
+	self.OnError = Signal.new()
+	self.OnModeChanged = Signal.new()  -- "ws" or "polling"
+
+	return self
+end
+
+function WebSocketClient:Connect()
+	local url = string.format("ws://%s:%d", self.Host, self.Port)
+	self.IsPolling = false
+
+	if WebSocket then
+		task.spawn(function()
+			local ok, err = pcall(function()
+				self.Socket = WebSocket.connect(url)
+				if not self.Socket then
+					error("WebSocket connect returned nil")
+				end
+
+				self.Socket.OnMessage:Connect(function(msg)
+					self:HandleMessage(msg)
+				end)
+				self.Socket.OnClose:Connect(function()
+					self:HandleDisconnect()
+				end)
+
+				self.Connected = true
+				self.ReconnectAttempts = 0
+				self.OnModeChanged:Fire("ws")
+				self.OnConnected:Fire()
+			end)
+
+			if not ok then
+				-- WebSocket failed, fall back to polling
+				self.OnError:Fire("WebSocket unavailable, switching to HTTP polling")
+				self.Socket = nil
+				self:ConnectWithPolling()
+			end
+		end)
+	else
+		self:ConnectWithPolling()
+	end
+end
+
+function WebSocketClient:ConnectWithPolling()
+	self.IsPolling = true
+	local httpPort = self.Port + 1
+
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local testUrl = string.format("http://%s:%d/health?clientId=%s", self.Host, httpPort, self.ClientId)
+			local response = HttpService:GetAsync(testUrl, false)
+
+			self.Connected = true
+			self.ReconnectAttempts = 0
+			self.OnModeChanged:Fire("polling")
+			self.OnConnected:Fire()
+
+			self:StartPolling(httpPort)
+		end)
+
+		if not ok then
+			self.OnError:Fire("Connection failed: " .. tostring(err))
+			self:AttemptReconnect()
+		end
+	end)
+end
+
+function WebSocketClient:StartPolling(httpPort)
+	task.spawn(function()
+		while self.Connected do
+			-- Pause in Play mode (HTTP blocked in game sandbox)
+			if not RunService:IsEdit() then
+				task.wait(1)
+				continue
+			end
+
+			local ok, result = pcall(function()
+				local pollUrl = string.format("http://%s:%d/poll?clientId=%s", self.Host, httpPort, self.ClientId)
+				local response = HttpService:GetAsync(pollUrl, false)
+
+				if response and response ~= "" then
+					local messages = HttpService:JSONDecode(response)
+					if messages and #messages > 0 then
+						for _, message in ipairs(messages) do
+							self:HandleMessage(HttpService:JSONEncode(message))
+						end
+					end
+				end
+			end)
+
+			if not ok then
+				-- HTTP error in non-Edit mode or network issue, back off
+				task.wait(3)
+			else
+				task.wait(0.5)
+			end
+		end
+	end)
+end
+
+function WebSocketClient:Disconnect()
+	self.Connected = false
+	self.IsPolling = false
+	if self.Socket then
+		pcall(function() self.Socket:Close() end)
+		self.Socket = nil
+	end
+	self.OnDisconnected:Fire()
+end
+
+function WebSocketClient:IsConnected()
+	return self.Connected
+end
+
+function WebSocketClient:Send(message)
+	if not self.Connected then
+		return false
+	end
+
+	-- WebSocket path
+	if self.Socket and not self.IsPolling then
+		local ok, err = pcall(function()
+			local json = HttpService:JSONEncode(message)
+			self.Socket:Send(json)
+		end)
+		if not ok then
+			self.OnError:Fire(tostring(err))
+			return false
+		end
+		return true
+	end
+
+	-- HTTP polling path
+	local httpPort = self.Port + 1
+	local ok, err = pcall(function()
+		local url = string.format("http://%s:%d/send?clientId=%s", self.Host, httpPort, self.ClientId)
+		local json = HttpService:JSONEncode(message)
+		HttpService:PostAsync(url, json)
+	end)
+
+	if not ok then
+		self.OnError:Fire(tostring(err))
+		return false
+	end
+
+	return true
+end
+
+function WebSocketClient:HandleMessage(rawMessage)
+	local ok, message = pcall(function()
+		return HttpService:JSONDecode(rawMessage)
+	end)
+
+	if ok and message then
+		self.OnMessageReceived:Fire(message)
+	end
+end
+
+function WebSocketClient:HandleDisconnect()
+	self.Connected = false
+	self.Socket = nil
+	self.OnDisconnected:Fire()
+	self:AttemptReconnect()
+end
+
+function WebSocketClient:AttemptReconnect()
+	if self.ReconnectAttempts >= self.MaxReconnectAttempts then
+		self.OnError:Fire("Max reconnect attempts reached")
+		return
+	end
+
+	self.ReconnectAttempts = self.ReconnectAttempts + 1
+	local delay = math.min(2 ^ self.ReconnectAttempts, 30)
+	task.delay(delay, function()
+		if not self.Connected then
+			self:Connect()
+		end
+	end)
+end
+
+return WebSocketClient
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000013">
+      <Properties>
+        <string name="Name">ui</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000014">
+        <Properties>
+          <string name="Name">ActivityLog</string>
+          <ProtectedString name="Source"><![CDATA[--[[ Rune Studio Plugin - Activity Log v3 ]]
+local Theme = require(script.Parent.Parent.utils.Theme)
+local ActivityLog = {}; ActivityLog.__index = ActivityLog
+
+local MAX = 500
+
+function ActivityLog.new(parentFrame)
+	local self = setmetatable({}, ActivityLog); local t = Theme
+	self.Entries = {}; self.EntryFrames = {}
+
+	self.Container = Instance.new("Frame")
+	self.Container.Size = UDim2.new(1, 0, 1, 0); self.Container.BackgroundColor3 = t.Colors.Bg
+	self.Container.BorderSizePixel = 0; self.Container.Parent = parentFrame
+
+	self.Scroll = Instance.new("ScrollingFrame")
+	self.Scroll.Size = UDim2.new(1, 0, 1, 0); self.Scroll.BackgroundTransparency = 1; self.Scroll.BorderSizePixel = 0
+	self.Scroll.ScrollBarThickness = 4; self.Scroll.ScrollBarImageColor3 = t.Colors.BorderLight
+	self.Scroll.CanvasSize = UDim2.new(0, 0, 0, 0); self.Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	self.Scroll.Parent = self.Container
+
+	self.Layout = Instance.new("UIListLayout"); self.Layout.SortOrder = Enum.SortOrder.LayoutOrder
+	self.Layout.Padding = UDim.new(0, 1); self.Layout.Parent = self.Scroll
+	return self
+end
+
+function ActivityLog:AddEntry(cat, msg)
+	local t = Theme; local ts = os.date("%H:%M:%S")
+	local color, bg, icon
+	if cat == "success" then color, bg, icon = t.Colors.Success, t.Colors.SuccessBg, "✓"
+	elseif cat == "error" then color, bg, icon = t.Colors.Error, t.Colors.ErrorBg, "✗"
+	elseif cat == "warn" then color, bg, icon = t.Colors.Warning, t.Colors.WarningBg, "⚠"
+	elseif cat == "info" then color, bg, icon = t.Colors.Info, t.Colors.InfoBg, "ℹ"
+	elseif cat == "sync" then color, bg, icon = t.Colors.Accent, t.Colors.BgHover, "↻"
+	else color, bg, icon = t.Colors.TextMuted, t.Colors.BgCard, "•" end
+
+	local e = { cat = cat, msg = msg, ts = ts, icon = icon, color = color, bg = bg }
+	table.insert(self.Entries, e)
+	while #self.Entries > MAX do table.remove(self.Entries, 1) end
+
+	local idx = #self.Entries
+	local f = Instance.new("Frame")
+	f.Size = UDim2.new(1, -6, 0, t.Sizes.LogRowH); f.Position = UDim2.new(0, 3, 0, 0)
+	f.BackgroundColor3 = bg; f.BackgroundTransparency = 0.5; f.BorderSizePixel = 0
+	f.LayoutOrder = idx; f.Parent = self.Scroll
+	Instance.new("UICorner", f).CornerRadius = t.Radius.Xs
+
+	local tl = Instance.new("TextLabel")
+	tl.Size = UDim2.new(0, 50, 1, 0); tl.Position = UDim2.new(0, 4, 0, 0)
+	tl.BackgroundTransparency = 1; tl.Text = ts; tl.TextColor3 = t.Colors.TextDim
+	tl.Font = t.Fonts.Mono; tl.TextSize = t.Sizes.Tiny; tl.TextXAlignment = Enum.TextXAlignment.Right; tl.Parent = f
+
+	local il = Instance.new("TextLabel")
+	il.Size = UDim2.new(0, 14, 1, 0); il.Position = UDim2.new(0, 56, 0, 0)
+	il.BackgroundTransparency = 1; il.Text = icon; il.TextColor3 = color
+	il.Font = t.Fonts.Body; il.TextSize = 10; il.Parent = f
+
+	local ml = Instance.new("TextBox")
+	ml.Size = UDim2.new(1, -76, 1, 0); ml.Position = UDim2.new(0, 72, 0, 0)
+	ml.BackgroundTransparency = 1; ml.Text = msg; ml.TextColor3 = t.Colors.Text
+	ml.Font = t.Fonts.Mono; ml.TextSize = t.Sizes.Tiny; ml.TextXAlignment = Enum.TextXAlignment.Left
+	ml.TextTruncate = Enum.TextTruncate.AtEnd; ml.ClearTextOnFocus = false
+	ml.Parent = f
+
+	self.EntryFrames[idx] = f
+	self.Scroll.CanvasPosition = Vector2.new(0, 99999)
+end
+
+function ActivityLog:Clear() for _, f in pairs(self.EntryFrames) do f:Destroy() end; self.Entries = {}; self.EntryFrames = {} end
+return ActivityLog
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000015">
+        <Properties>
+          <string name="Name">FileTree</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Enhanced File Tree v3
+	With search/filter, card-based nodes, smooth selection
+]]
+
+local Theme = require(script.Parent.Parent.utils.Theme)
+
+local FileTree = {}
+FileTree.__index = FileTree
+
+function FileTree.new(parentFrame)
+	local self = setmetatable({}, FileTree)
+
+	self.ParentFrame = parentFrame
+	self.Nodes = {}
+	self.ExpandedNodes = {}
+	self.NodeFrames = {}
+	self.SelectedNode = nil
+	self.AllData = nil
+	self.SearchTerm = ""
+
+	self:BuildUI()
+
+	return self
+end
+
+function FileTree:BuildUI()
+	local t = Theme
+
+	self.Container = Instance.new("Frame")
+	self.Container.Size = UDim2.new(1, 0, 1, 0)
+	self.Container.BackgroundColor3 = t.Colors.Bg
+	self.Container.BorderSizePixel = 0
+	self.Container.Parent = self.ParentFrame
+
+	-- Search bar
+	self.SearchFrame = Instance.new("Frame")
+	self.SearchFrame.Size = UDim2.new(1, -12, 0, t.Sizes.SearchH)
+	self.SearchFrame.Position = UDim2.new(0, 6, 0, 4)
+	self.SearchFrame.BackgroundColor3 = t.Colors.BgInput
+	self.SearchFrame.BorderSizePixel = 1
+	self.SearchFrame.BorderColor3 = t.Colors.Border
+	self.SearchFrame.Parent = self.Container
+
+	local sc = Instance.new("UICorner")
+	sc.CornerRadius = t.Radius.Sm
+	sc.Parent = self.SearchFrame
+
+	self.SearchBox = Instance.new("TextBox")
+	self.SearchBox.Size = UDim2.new(1, -16, 1, 0)
+	self.SearchBox.Position = UDim2.new(0, 8, 0, 0)
+	self.SearchBox.BackgroundTransparency = 1
+	self.SearchBox.PlaceholderText = "Filter files..."
+	self.SearchBox.Text = ""
+	self.SearchBox.TextColor3 = t.Colors.Text
+	self.SearchBox.PlaceholderColor3 = t.Colors.TextDim
+	self.SearchBox.Font = t.Fonts.Body
+	self.SearchBox.TextSize = t.Sizes.Small
+	self.SearchBox.ClearTextOnFocus = false
+	self.SearchBox.Parent = self.SearchFrame
+
+	self.SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+		self.SearchTerm = self.SearchBox.Text:lower()
+		self:Refresh()
+	end)
+
+	-- Tree area
+	self.TreeFrame = Instance.new("ScrollingFrame")
+	self.TreeFrame.Size = UDim2.new(1, 0, 1, -(t.Sizes.SearchH + 8))
+	self.TreeFrame.Position = UDim2.new(0, 0, 0, t.Sizes.SearchH + 8)
+	self.TreeFrame.BackgroundTransparency = 1
+	self.TreeFrame.BorderSizePixel = 0
+	self.TreeFrame.ScrollBarThickness = 4
+	self.TreeFrame.ScrollBarImageColor3 = t.Colors.BorderLight
+	self.TreeFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+	self.TreeFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	self.TreeFrame.Parent = self.Container
+
+	self.TreeLayout = Instance.new("UIListLayout")
+	self.TreeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	self.TreeLayout.Padding = UDim.new(0, 1)
+	self.TreeLayout.Parent = self.TreeFrame
+end
+
+function FileTree:Refresh()
+	if self.AllData then
+		self:UpdateTree(self.AllData)
+	end
+end
+
+function FileTree:UpdateTree(treeData)
+	self.AllData = treeData
+	self:ClearNodes()
+
+	if treeData then
+		for _, rootNode in ipairs(treeData) do
+			self:RenderNode(nil, rootNode, 0)
+		end
+	end
+end
+
+function FileTree:AddNode(parentId, nodeData)
+	local depth = self:GetDepth(parentId) + 1
+	self:RenderNode(parentId, nodeData, depth)
+end
+
+function FileTree:RemoveNode(nodeId)
+	local node = self.Nodes[nodeId]
+	if not node then return end
+
+	for _, childId in ipairs(node.children) do
+		self:RemoveNode(childId)
+	end
+
+	if node.parentId and self.Nodes[node.parentId] then
+		local siblings = self.Nodes[node.parentId].children
+		for i, id in ipairs(siblings) do
+			if id == nodeId then table.remove(siblings, i); break end
+		end
+	end
+
+	if self.NodeFrames[nodeId] then
+		self.NodeFrames[nodeId]:Destroy()
+		self.NodeFrames[nodeId] = nil
+	end
+	self.Nodes[nodeId] = nil
+	if self.SelectedNode == nodeId then self.SelectedNode = nil end
+end
+
+function FileTree:RenderNode(parentId, nodeData, depth)
+	local t = Theme
+	local nodeId = nodeData.id or nodeData.Name or ("n" .. depth)
+	local name = nodeData.name or nodeData.Name or "?"
+	local className = nodeData.className or "Folder"
+
+	-- Search filter
+	if self.SearchTerm ~= "" then
+		local match = name:lower():find(self.SearchTerm, 1, true)
+		if not match then
+			-- Still add to nodes for hierarchy but skip render
+			self.Nodes[nodeId] = { data = nodeData, parentId = parentId, depth = depth, children = {}, hidden = true }
+			if parentId and self.Nodes[parentId] then
+				table.insert(self.Nodes[parentId].children, nodeId)
+			end
+			return
+		end
+	end
+
+	local hasChildren = nodeData.children and #nodeData.children > 0
+	local isFolder = (className == "Folder" or hasChildren)
+	local indent = depth * t.Sizes.IndentW
+	local rowH = t.Sizes.TreeRowH
+
+	self.Nodes[nodeId] = { data = nodeData, parentId = parentId, depth = depth, children = {}, hidden = false }
+	if parentId and self.Nodes[parentId] then
+		table.insert(self.Nodes[parentId].children, nodeId)
+	end
+
+	-- Row frame
+	local frame = Instance.new("Frame")
+	frame.Name = "Node_" .. nodeId
+	frame.Size = UDim2.new(1, -8, 0, rowH)
+	frame.Position = UDim2.new(0, 4, 0, 0)
+	frame.BackgroundColor3 = t.Colors.Bg
+	frame.BorderSizePixel = 0
+	frame.LayoutOrder = nodeId
+	frame.Parent = self.TreeFrame
+
+	-- Selection highlight
+	local sel = Instance.new("Frame")
+	sel.Name = "Sel"
+	sel.Size = UDim2.new(1, 0, 1, 0)
+	sel.BackgroundColor3 = t.Colors.AccentMuted
+	sel.BackgroundTransparency = 1
+	sel.BorderSizePixel = 0
+	sel.ZIndex = 0
+	sel.Parent = frame
+	Instance.new("UICorner", sel).CornerRadius = t.Radius.Sm
+
+	-- Hover
+	local hover = Instance.new("Frame")
+	hover.Name = "Hover"
+	hover.Size = UDim2.new(1, 0, 1, 0)
+	hover.BackgroundColor3 = t.Colors.BgHover
+	hover.BackgroundTransparency = 1
+	hover.BorderSizePixel = 0
+	hover.ZIndex = 0
+	hover.Parent = frame
+	Instance.new("UICorner", hover).CornerRadius = t.Radius.Sm
+
+	-- Expand btn
+	local expandBtn = nil
+	if isFolder then
+		expandBtn = Instance.new("TextButton")
+		expandBtn.Size = UDim2.new(0, 14, 0, 14)
+		expandBtn.Position = UDim2.new(0, indent + 4, 0.5, -7)
+		expandBtn.BackgroundTransparency = 1
+		expandBtn.Text = self.ExpandedNodes[nodeId] and "▾" or "▸"
+		expandBtn.TextColor3 = t.Colors.TextDim
+		expandBtn.Font = t.Fonts.Body
+		expandBtn.TextSize = 10
+		expandBtn.ZIndex = 2
+		expandBtn.Parent = frame
+		expandBtn.MouseButton1Click:Connect(function() self:ToggleExpand(nodeId) end)
+	end
+
+	-- Icon
+	local iconX = indent + (isFolder and 20 or 6)
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Size = UDim2.new(0, t.Sizes.IconW, 0, t.Sizes.IconW)
+	iconLabel.Position = UDim2.new(0, iconX, 0.5, -t.Sizes.IconW / 2)
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = self:GetIcon(nodeData)
+	iconLabel.TextColor3 = self:GetIconColor(nodeData)
+	iconLabel.Font = t.Fonts.Body
+	iconLabel.TextSize = 14
+	iconLabel.ZIndex = 2
+	iconLabel.Parent = frame
+
+	-- Name
+	local nameX = iconX + t.Sizes.IconW + 4
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -(nameX + 8), 1, 0)
+	nameLabel.Position = UDim2.new(0, nameX, 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = name
+	nameLabel.TextColor3 = t.Colors.Text
+	nameLabel.Font = t.Fonts.Body
+	nameLabel.TextSize = t.Sizes.Small
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.ZIndex = 2
+	nameLabel.Parent = frame
+
+	-- Interaction
+	frame.MouseEnter:Connect(function()
+		if self.SelectedNode ~= nodeId then hover.BackgroundTransparency = 0 end
+	end)
+	frame.MouseLeave:Connect(function()
+		if self.SelectedNode ~= nodeId then hover.BackgroundTransparency = 1 end
+	end)
+	frame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			self:SelectNode(nodeId)
+		end
+	end)
+
+	self.NodeFrames[nodeId] = frame
+	self.Nodes[nodeId].frame = frame
+	self.Nodes[nodeId].sel = sel
+	self.Nodes[nodeId].hover = hover
+	self.Nodes[nodeId].expandBtn = expandBtn
+
+	-- Render expanded children
+	if self.ExpandedNodes[nodeId] and nodeData.children then
+		for _, child in ipairs(nodeData.children) do
+			self:RenderNode(nodeId, child, depth + 1)
+		end
+	end
+end
+
+function FileTree:ToggleExpand(nodeId)
+	self.ExpandedNodes[nodeId] = not self.ExpandedNodes[nodeId]
+	self:Refresh()
+end
+
+function FileTree:SelectNode(nodeId)
+	if self.SelectedNode and self.Nodes[self.SelectedNode] then
+		local p = self.Nodes[self.SelectedNode]
+		if p.sel then p.sel.BackgroundTransparency = 1 end
+		if p.hover then p.hover.BackgroundTransparency = 1 end
+	end
+	self.SelectedNode = nodeId
+	local n = self.Nodes[nodeId]
+	if n and n.sel then
+		n.sel.BackgroundTransparency = 0.85
+		if n.hover then n.hover.BackgroundTransparency = 1 end
+	end
+end
+
+function FileTree:GetDepth(nodeId)
+	if not nodeId or not self.Nodes[nodeId] then return 0 end
+	local d, c = 0, nodeId
+	while self.Nodes[c] and self.Nodes[c].parentId do d = d + 1; c = self.Nodes[c].parentId end
+	return d
+end
+
+function FileTree:GetIcon(d)
+	local c = d.className or d.ClassName or "Folder"
+	if c == "Folder" then return "📁"
+	elseif c == "Script" then return "⚡"
+	elseif c == "LocalScript" then return "👤"
+	elseif c == "ModuleScript" then return "📦"
+	elseif c == "Model" then return "🧊"
+	else return "📄" end
+end
+
+function FileTree:GetIconColor(d)
+	local c = d.className or d.ClassName or "Folder"
+	if c == "Folder" then return Theme.Colors.Folder
+	elseif c == "Script" then return Theme.Colors.Script
+	elseif c == "LocalScript" then return Theme.Colors.LocalScript
+	elseif c == "ModuleScript" then return Theme.Colors.ModuleScript
+	else return Theme.Colors.TextMuted end
+end
+
+function FileTree:ClearNodes()
+	for _, f in pairs(self.NodeFrames) do f:Destroy() end
+	self.NodeFrames = {}
+	self.Nodes = {}
+	self.SelectedNode = nil
+end
+
+return FileTree
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000016">
+        <Properties>
+          <string name="Name">MainWindow</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin v3 — Minimal Modern UI
+	Single-line connection, toast notifications, logo header
+]]
+
+local Theme = require(script.Parent.Parent.utils.Theme)
+local FileTree = require(script.Parent.FileTree)
+local ActivityLog = require(script.Parent.ActivityLog)
+local StatusBar = require(script.Parent.StatusBar)
+
+local MainWindow = {}
+MainWindow.__index = MainWindow
+
+local Signal = {}
+Signal.__index = Signal
+function Signal.new() local s = setmetatable({}, Signal); s._l = {}; return s end
+function Signal:Connect(f) table.insert(self._l, f); return {Disconnect = function() for i, x in ipairs(self._l) do if x == f then table.remove(self._l, i); break end end end} end
+function Signal:Fire(...) for _, f in ipairs(self._l) do task.spawn(f, ...) end end
+
+function MainWindow.new(plugin)
+	local self = setmetatable({}, MainWindow)
+	local t = Theme
+
+	self.Plugin = plugin
+	self.IsVisible = false
+	self.IsConnected = false
+	self.ActiveTab = "files"
+
+	self.OnConnectRequested = Signal.new()
+	self.OnDisconnectRequested = Signal.new()
+	self.OnSyncToggle = Signal.new()
+	self.OnUndoRequested = Signal.new()
+
+	self.Widget = plugin:CreateDockWidgetPluginGui("RunePanel",
+		DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Right, false, false, 300, 500, 260, 320))
+	self.Widget.Title = "◆ RUNE"
+	self.Widget.Name = "RunePanel"
+
+	self:BuildUI()
+
+	self.Widget:GetPropertyChangedSignal("Enabled"):Connect(function()
+		self.IsVisible = self.Widget.Enabled
+		plugin:SetSetting("Rune_IsOpen", tostring(self.IsVisible))
+	end)
+
+	return self
+end
+
+function MainWindow:BuildUI()
+	local t = Theme
+	local W = function(name, parent) return Instance.new(name, parent) end
+
+	local root = W("Frame")
+	root.Size = UDim2.new(1, 0, 1, 0)
+	root.BackgroundColor3 = t.Colors.Bg
+	root.BorderSizePixel = 0
+	root.Parent = self.Widget
+
+	-- === HEADER ===
+	local header = W("Frame")
+	header.Size = UDim2.new(1, 0, 0, 36)
+	header.BackgroundColor3 = t.Colors.Bg
+	header.BorderSizePixel = 0
+	header.Parent = root
+
+	local logo = W("TextLabel")
+	logo.Size = UDim2.new(0, 24, 0, 24)
+	logo.Position = UDim2.new(0, 10, 0, 6)
+	logo.BackgroundTransparency = 1
+	logo.Text = "◆"
+	logo.TextColor3 = t.Colors.Accent
+	logo.Font = t.Fonts.Body
+	logo.TextSize = 20
+	logo.Parent = header
+
+	local title = W("TextLabel")
+	title.Size = UDim2.new(1, -90, 1, 0)
+	title.Position = UDim2.new(0, 36, 0, 0)
+	title.BackgroundTransparency = 1
+	title.Text = "RUNE"
+	title.TextColor3 = t.Colors.TextBright
+	title.Font = t.Fonts.Title
+	title.TextSize = t.Sizes.Title
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = header
+
+	-- Version badge
+	local ver = W("TextLabel")
+	ver.Size = UDim2.new(0, 50, 0, 16)
+	ver.Position = UDim2.new(1, -56, 0, 10)
+	ver.BackgroundColor3 = t.Colors.BgCard
+	ver.BorderSizePixel = 1
+	ver.BorderColor3 = t.Colors.Border
+	ver.Text = "v2.2"
+	ver.TextColor3 = t.Colors.TextDim
+	ver.Font = t.Fonts.Mono
+	ver.TextSize = t.Sizes.Tiny
+	ver.Parent = header
+	Instance.new("UICorner", ver).CornerRadius = t.Radius.Xs
+
+	-- Header line
+	local hl = W("Frame")
+	hl.Size = UDim2.new(1, 0, 0, 1)
+	hl.Position = UDim2.new(0, 0, 1, 0)
+	hl.BackgroundColor3 = t.Colors.Border
+	hl.BorderSizePixel = 0
+	hl.Parent = header
+
+	-- === CONNECTION BAR ===
+	local connBar = W("Frame")
+	connBar.Size = UDim2.new(1, -12, 0, 32)
+	connBar.Position = UDim2.new(0, 6, 0, 42)
+	connBar.BackgroundColor3 = t.Colors.BgCard
+	connBar.BorderSizePixel = 1
+	connBar.BorderColor3 = t.Colors.Border
+	connBar.Parent = root
+	Instance.new("UICorner", connBar).CornerRadius = t.Radius.Md
+
+	-- Connection dot
+	self.ConnDot = W("Frame")
+	self.ConnDot.Size = UDim2.new(0, 8, 0, 8)
+	self.ConnDot.Position = UDim2.new(0, 8, 0.5, -4)
+	self.ConnDot.BackgroundColor3 = t.Colors.TextDim
+	self.ConnDot.BorderSizePixel = 0
+	self.ConnDot.Parent = connBar
+	Instance.new("UICorner", self.ConnDot).CornerRadius = UDim.new(1, 0)
+
+	-- Single input: host:port
+	self.AddressInput = W("TextBox")
+	self.AddressInput.Size = UDim2.new(1, -90, 1, 0)
+	self.AddressInput.Position = UDim2.new(0, 22, 0, 0)
+	self.AddressInput.BackgroundTransparency = 1
+	self.AddressInput.Text = "localhost:34872"
+	self.AddressInput.PlaceholderText = "host:port"
+	self.AddressInput.TextColor3 = t.Colors.Text
+	self.AddressInput.PlaceholderColor3 = t.Colors.TextDim
+	self.AddressInput.Font = t.Fonts.Mono
+	self.AddressInput.TextSize = t.Sizes.Small
+	self.AddressInput.ClearTextOnFocus = false
+	self.AddressInput.Parent = connBar
+
+	-- Connect button
+	self.ConnectBtn = W("TextButton")
+	self.ConnectBtn.Size = UDim2.new(0, 56, 0, 22)
+	self.ConnectBtn.Position = UDim2.new(1, -62, 0.5, -11)
+	self.ConnectBtn.BackgroundColor3 = t.Colors.Accent
+	self.ConnectBtn.BorderSizePixel = 0
+	self.ConnectBtn.Text = "Connect"
+	self.ConnectBtn.TextColor3 = t.Colors.TextBright
+	self.ConnectBtn.Font = t.Fonts.Header
+	self.ConnectBtn.TextSize = t.Sizes.Small
+	self.ConnectBtn.AutoButtonColor = true
+	self.ConnectBtn.Parent = connBar
+	Instance.new("UICorner", self.ConnectBtn).CornerRadius = t.Radius.Sm
+
+	self.ConnectBtn.MouseButton1Click:Connect(function()
+		if self.IsConnected then
+			self.OnDisconnectRequested:Fire()
+		else
+			local addr = self.AddressInput.Text
+			local host, port = addr:match("^([^:]+):(%d+)$")
+			self.OnConnectRequested:Fire(host or "localhost", tonumber(port) or 34873)
+		end
+	end)
+
+	-- Quick actions
+	local actions = W("Frame")
+	actions.Size = UDim2.new(1, -12, 0, 18)
+	actions.Position = UDim2.new(0, 6, 0, 78)
+	actions.BackgroundTransparency = 1
+	actions.Parent = root
+
+	local function btn(text, x, w)
+		local b = W("TextButton")
+		b.Size = UDim2.new(0, w, 1, 0)
+		b.Position = UDim2.new(0, x, 0, 0)
+		b.BackgroundColor3 = t.Colors.BgCard
+		b.BorderSizePixel = 1
+		b.BorderColor3 = t.Colors.Border
+		b.Text = text
+		b.TextColor3 = t.Colors.TextDim
+		b.Font = t.Fonts.Tiny
+		b.TextSize = t.Sizes.Tiny
+		b.AutoButtonColor = false
+		b.Parent = actions
+		Instance.new("UICorner", b).CornerRadius = t.Radius.Xs
+		b.MouseEnter:Connect(function() b.BackgroundColor3 = t.Colors.BgHover; b.TextColor3 = t.Colors.TextMuted end)
+		b.MouseLeave:Connect(function() b.BackgroundColor3 = t.Colors.BgCard; b.TextColor3 = t.Colors.TextDim end)
+		return b
+	end
+
+	self.SyncBtn = btn("↻ Sync", 0, 56)
+	self.SyncBtn.MouseButton1Click:Connect(function()
+		if syncHandler then syncHandler:RequestSync() end
+	end)
+
+	local expBtn = btn("⊞", 60, 28)
+	expBtn.MouseButton1Click:Connect(function()
+		if self.FileTree then
+			for id in pairs(self.FileTree.Nodes) do self.FileTree.ExpandedNodes[id] = true end
+			self.FileTree:Refresh()
+		end
+	end)
+
+	local colBtn = btn("⊟", 92, 28)
+	colBtn.MouseButton1Click:Connect(function()
+		if self.FileTree then self.FileTree.ExpandedNodes = {}; self.FileTree:Refresh() end
+	end)
+
+	-- === TABS ===
+	local tabY = 100
+	local tabBar = W("Frame")
+	tabBar.Size = UDim2.new(1, 0, 0, t.Sizes.TabH)
+	tabBar.Position = UDim2.new(0, 0, 0, tabY)
+	tabBar.BackgroundColor3 = t.Colors.Bg
+	tabBar.BorderSizePixel = 0
+	tabBar.Parent = root
+
+	local tabLine = W("Frame")
+	tabLine.Size = UDim2.new(1, 0, 0, 1)
+	tabLine.Position = UDim2.new(0, 0, 1, -1)
+	tabLine.BackgroundColor3 = t.Colors.Border
+	tabLine.BorderSizePixel = 0
+	tabLine.Parent = tabBar
+
+	self:MakeTab(tabBar, "Files", "files", 10)
+	self:MakeTab(tabBar, "Activity", "activity", 90)
+
+	self.TabInd = W("Frame")
+	self.TabInd.Size = UDim2.new(0, 70, 0, 2)
+	self.TabInd.Position = UDim2.new(0, 10, 1, -1)
+	self.TabInd.BackgroundColor3 = t.Colors.Accent
+	self.TabInd.BorderSizePixel = 0
+	self.TabInd.Parent = tabBar
+
+	-- === CONTENT ===
+	local contentY = tabY + t.Sizes.TabH
+	self.ContentFrame = W("Frame")
+	self.ContentFrame.Size = UDim2.new(1, 0, 1, -(contentY + t.Sizes.StatusBarH))
+	self.ContentFrame.Position = UDim2.new(0, 0, 0, contentY)
+	self.ContentFrame.BackgroundColor3 = t.Colors.Bg
+	self.ContentFrame.BorderSizePixel = 0
+	self.ContentFrame.ClipsDescendants = true
+	self.ContentFrame.Parent = root
+
+	self.FilesPanel = W("Frame")
+	self.FilesPanel.Size = UDim2.new(1, 0, 1, 0)
+	self.FilesPanel.BackgroundTransparency = 1
+	self.FilesPanel.Parent = self.ContentFrame
+	self.FileTree = FileTree.new(self.FilesPanel)
+
+	self.ActivityPanel = W("Frame")
+	self.ActivityPanel.Size = UDim2.new(1, 0, 1, 0)
+	self.ActivityPanel.BackgroundTransparency = 1
+	self.ActivityPanel.Visible = false
+	self.ActivityPanel.Parent = self.ContentFrame
+	self.ActivityLog = ActivityLog.new(self.ActivityPanel)
+
+	-- Notification toast
+	self.Toast = W("Frame")
+	self.Toast.Size = UDim2.new(1, -16, 0, 28)
+	self.Toast.Position = UDim2.new(0, 8, 1, -(t.Sizes.StatusBarH + 34))
+	self.Toast.BackgroundColor3 = t.Colors.BgCard
+	self.Toast.BorderSizePixel = 1
+	self.Toast.BorderColor3 = t.Colors.Border
+	self.Toast.Visible = false
+	self.Toast.ZIndex = 10
+	self.Toast.Parent = root
+	Instance.new("UICorner", self.Toast).CornerRadius = t.Radius.Sm
+
+	self.ToastIcon = W("TextLabel")
+	self.ToastIcon.Size = UDim2.new(0, 14, 1, 0)
+	self.ToastIcon.Position = UDim2.new(0, 8, 0, 0)
+	self.ToastIcon.BackgroundTransparency = 1
+	self.ToastIcon.Text = ""
+	self.ToastIcon.Font = t.Fonts.Body
+	self.ToastIcon.TextSize = 12
+	self.ToastIcon.ZIndex = 11
+	self.ToastIcon.Parent = self.Toast
+
+	self.ToastText = W("TextLabel")
+	self.ToastText.Size = UDim2.new(1, -28, 1, 0)
+	self.ToastText.Position = UDim2.new(0, 24, 0, 0)
+	self.ToastText.BackgroundTransparency = 1
+	self.ToastText.Text = ""
+	self.ToastText.TextColor3 = t.Colors.Text
+	self.ToastText.Font = t.Fonts.Body
+	self.ToastText.TextSize = t.Sizes.Small
+	self.ToastText.TextXAlignment = Enum.TextXAlignment.Left
+	self.ToastText.ZIndex = 11
+	self.ToastText.Parent = self.Toast
+
+	self.ToastTimer = nil
+
+	-- Status bar
+	self.StatusBar = StatusBar.new(root)
+	self.StatusBar:OnUndo(function() self.OnUndoRequested:Fire() end)
+	self.StatusBar:EnableUndo(false)
+
+	self.Root = root
+end
+
+function MainWindow:MakeTab(parent, label, id, x)
+	local t = Theme
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 70, 0, t.Sizes.TabH - 4)
+	btn.Position = UDim2.new(0, x, 0, 2)
+	btn.BackgroundTransparency = 1
+	btn.Text = label
+	btn.TextColor3 = t.Colors.TextDim
+	btn.Font = t.Fonts.Body
+	btn.TextSize = t.Sizes.Small
+	btn.Parent = parent
+
+	btn.MouseButton1Click:Connect(function() self:SwitchTab(id) end)
+	btn.MouseEnter:Connect(function() if self.ActiveTab ~= id then btn.TextColor3 = t.Colors.TextMuted end end)
+	btn.MouseLeave:Connect(function() if self.ActiveTab ~= id then btn.TextColor3 = t.Colors.TextDim end end)
+
+	if id == "files" then self.FilesTabBtn = btn else self.ActivityTabBtn = btn end
+end
+
+function MainWindow:SwitchTab(id)
+	if self.ActiveTab == id then return end
+	self.ActiveTab = id
+	if id == "files" then
+		self.FilesTabBtn.TextColor3 = Theme.Colors.TextBright
+		self.ActivityTabBtn.TextColor3 = Theme.Colors.TextDim
+		self.TabInd.Position = UDim2.new(0, 10, 1, -1)
+		self.FilesPanel.Visible = true
+		self.ActivityPanel.Visible = false
+	else
+		self.ActivityTabBtn.TextColor3 = Theme.Colors.TextBright
+		self.FilesTabBtn.TextColor3 = Theme.Colors.TextDim
+		self.TabInd.Position = UDim2.new(0, 90, 1, -1)
+		self.FilesPanel.Visible = false
+		self.ActivityPanel.Visible = true
+	end
+end
+
+function MainWindow:ShowToast(icon, text, color, duration)
+	local t = Theme
+	if self.ToastTimer then self.ToastTimer:Disconnect() end
+
+	self.ToastIcon.Text = icon
+	self.ToastIcon.TextColor3 = color or t.Colors.Text
+	self.ToastText.Text = text
+	self.Toast.BackgroundColor3 = t.Colors.BgCard
+	self.Toast.Visible = true
+
+	self.ToastTimer = task.delay(duration or 3, function()
+		self.Toast.Visible = false
+		self.ToastTimer = nil
+	end)
+end
+
+function MainWindow:Show() self.Widget.Enabled = true; self.IsVisible = true; self.Plugin:SetSetting("Rune_IsOpen", "true") end
+function MainWindow:Hide() self.Widget.Enabled = false; self.IsVisible = false; self.Plugin:SetSetting("Rune_IsOpen", "false") end
+
+function MainWindow:SetConnectionState(connected)
+	self.IsConnected = connected
+	if connected then
+		self.ConnectBtn.Text = "Disconnect"
+		self.ConnectBtn.BackgroundColor3 = Theme.Colors.Error
+		self.ConnDot.BackgroundColor3 = Theme.Colors.Success
+	else
+		self.ConnectBtn.Text = "Connect"
+		self.ConnectBtn.BackgroundColor3 = Theme.Colors.Accent
+		self.ConnDot.BackgroundColor3 = Theme.Colors.TextDim
+	end
+	self.StatusBar:SetConnectionState(connected)
+end
+
+function MainWindow:SetStatus(t, c) self.StatusBar:SetStatus(t, c) end
+function MainWindow:SetInstanceCount(n) self.StatusBar:SetInstanceCount(n) end
+function MainWindow:UpdateFileTree(d) self.FileTree:UpdateTree(d) end
+function MainWindow:AddFileNode(p, d) self.FileTree:AddNode(p, d) end
+function MainWindow:RemoveFileNode(id) self.FileTree:RemoveNode(id) end
+function MainWindow:LogActivity(c, m) if self.ActivityLog then self.ActivityLog:AddEntry(c, m) end end
+function MainWindow:EnableUndo(e) self.StatusBar:EnableUndo(e) end
+function MainWindow:Destroy() if self.Widget then self.Widget:Destroy() end end
+
+return MainWindow
+]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000017">
+        <Properties>
+          <string name="Name">StatusBar</string>
+          <ProtectedString name="Source"><![CDATA[--[[ Rune Studio Plugin - Modern Status Bar v3 ]]
+local Theme = require(script.Parent.Parent.utils.Theme)
+local StatusBar = {}; StatusBar.__index = StatusBar
+
+function StatusBar.new(parentFrame)
+	local self = setmetatable({}, StatusBar); local t = Theme
+	self.ParentFrame = parentFrame; self.Connected = false; self.ICount = 0
+
+	self.Frame = Instance.new("Frame")
+	self.Frame.Size = UDim2.new(1, 0, 0, t.Sizes.StatusBarH)
+	self.Frame.Position = UDim2.new(0, 0, 1, -t.Sizes.StatusBarH)
+	self.Frame.BackgroundColor3 = t.Colors.BgCard
+	self.Frame.BorderSizePixel = 0; self.Frame.Parent = parentFrame
+
+	local line = Instance.new("Frame")
+	line.Size = UDim2.new(1, 0, 0, 1); line.BackgroundColor3 = t.Colors.Border
+	line.BorderSizePixel = 0; line.Parent = self.Frame
+
+	self.Indicator = Instance.new("Frame")
+	self.Indicator.Size = UDim2.new(0, 7, 0, 7); self.Indicator.Position = UDim2.new(0, 10, 0.5, -3)
+	self.Indicator.BackgroundColor3 = t.Colors.TextDim; self.Indicator.BorderSizePixel = 0; self.Indicator.Parent = self.Frame
+	Instance.new("UICorner", self.Indicator).CornerRadius = UDim.new(1, 0)
+
+	self.StatusLabel = Instance.new("TextLabel")
+	self.StatusLabel.Size = UDim2.new(0.5, -20, 1, 0); self.StatusLabel.Position = UDim2.new(0, 22, 0, 0)
+	self.StatusLabel.BackgroundTransparency = 1; self.StatusLabel.Text = "Ready"
+	self.StatusLabel.TextColor3 = t.Colors.TextMuted; self.StatusLabel.Font = t.Fonts.Body
+	self.StatusLabel.TextSize = t.Sizes.Small; self.StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+	self.StatusLabel.Parent = self.Frame
+
+	self.CountLabel = Instance.new("TextLabel")
+	self.CountLabel.Size = UDim2.new(0, 100, 1, 0); self.CountLabel.Position = UDim2.new(1, -106, 0, 0)
+	self.CountLabel.BackgroundTransparency = 1; self.CountLabel.Text = ""
+	self.CountLabel.TextColor3 = t.Colors.TextDim; self.CountLabel.Font = t.Fonts.Mono
+	self.CountLabel.TextSize = t.Sizes.Small; self.CountLabel.TextXAlignment = Enum.TextXAlignment.Right
+	self.CountLabel.Parent = self.Frame
+
+	self.UndoBtn = Instance.new("TextButton")
+	self.UndoBtn.Size = UDim2.new(0, 44, 0, t.Sizes.StatusBarH - 4); self.UndoBtn.Position = UDim2.new(1, -46, 0, 2)
+	self.UndoBtn.BackgroundColor3 = t.Colors.BgInput; self.UndoBtn.BorderSizePixel = 1; self.UndoBtn.BorderColor3 = t.Colors.Border
+	self.UndoBtn.Text = "↩"; self.UndoBtn.TextColor3 = t.Colors.TextDim; self.UndoBtn.Font = t.Fonts.Body
+	self.UndoBtn.TextSize = t.Sizes.Small; self.UndoBtn.AutoButtonColor = false; self.UndoBtn.Parent = self.Frame
+	Instance.new("UICorner", self.UndoBtn).CornerRadius = t.Radius.Xs
+
+	self.UndoBtn.MouseEnter:Connect(function() self.UndoBtn.BackgroundColor3 = t.Colors.BgHover; self.UndoBtn.TextColor3 = t.Colors.Warning end)
+	self.UndoBtn.MouseLeave:Connect(function() self.UndoBtn.BackgroundColor3 = t.Colors.BgInput; self.UndoBtn.TextColor3 = t.Colors.TextDim end)
+	return self
+end
+
+function StatusBar:SetConnectionState(c)
+	self.Connected = c
+	self.Indicator.BackgroundColor3 = c and Theme.Colors.Success or Theme.Colors.TextDim
+end
+
+function StatusBar:SetStatus(t, c)
+	self.StatusLabel.Text = t
+	self.StatusLabel.TextColor3 = c or Theme.Colors.TextMuted
+end
+
+function StatusBar:SetInstanceCount(n)
+	self.ICount = n
+	self.CountLabel.Text = n > 0 and (n .. " instance" .. (n ~= 1 and "s" or "")) or ""
+end
+
+function StatusBar:OnUndo(fn) self.UndoBtn.MouseButton1Click:Connect(fn) end
+function StatusBar:EnableUndo(e) self.UndoBtn.Visible = e end
+return StatusBar
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000018">
+      <Properties>
+        <string name="Name">utils</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000019">
+        <Properties>
+          <string name="Name">Theme</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Modern Theme v3
+	Refined dark theme with card design and subtle gradients
+]]
+
+local Theme = {}
+
+-- Refined palette: deeper blacks, softer accents
+Theme.Colors = {
+	-- Layers
+	Bg = Color3.fromRGB(22, 22, 24),
+	BgCard = Color3.fromRGB(30, 30, 34),
+	BgHover = Color3.fromRGB(38, 38, 44),
+	BgInput = Color3.fromRGB(42, 42, 48),
+	BgHeader = Color3.fromRGB(28, 28, 32),
+
+	-- Borders
+	Border = Color3.fromRGB(50, 50, 56),
+	BorderLight = Color3.fromRGB(62, 62, 68),
+
+	-- Accent
+	Accent = Color3.fromRGB(0, 120, 212),
+	AccentHover = Color3.fromRGB(0, 136, 228),
+	AccentMuted = Color3.fromRGB(10, 60, 120),
+
+	-- Semantic
+	Success = Color3.fromRGB(64, 200, 64),
+	SuccessBg = Color3.fromRGB(30, 70, 40),
+	Warning = Color3.fromRGB(220, 180, 60),
+	WarningBg = Color3.fromRGB(70, 60, 30),
+	Error = Color3.fromRGB(240, 72, 72),
+	ErrorBg = Color3.fromRGB(75, 35, 35),
+	Info = Color3.fromRGB(80, 170, 240),
+	InfoBg = Color3.fromRGB(35, 50, 70),
+
+	-- Text
+	Text = Color3.fromRGB(212, 212, 216),
+	TextBright = Color3.fromRGB(248, 248, 252),
+	TextMuted = Color3.fromRGB(136, 136, 144),
+	TextDim = Color3.fromRGB(96, 96, 104),
+
+	-- File type colors
+	Folder = Color3.fromRGB(220, 200, 120),
+	Script = Color3.fromRGB(100, 200, 110),
+	LocalScript = Color3.fromRGB(100, 175, 210),
+	ModuleScript = Color3.fromRGB(180, 140, 220),
+}
+
+Theme.Fonts = {
+	Title = Enum.Font.GothamBold,
+	Header = Enum.Font.GothamSemibold,
+	Body = Enum.Font.Gotham,
+	Mono = Enum.Font.Code,
+	Tiny = Enum.Font.Gotham,
+}
+
+Theme.Sizes = {
+	PanelW = 320,
+	Title = 18,
+	Body = 13,
+	Small = 11,
+	Tiny = 10,
+	ButtonH = 28,
+	InputH = 26,
+	TabH = 34,
+	TreeRowH = 26,
+	LogRowH = 20,
+	IndentW = 16,
+	IconW = 16,
+	StatusBarH = 28,
+	ConnBarH = 36,
+	SearchH = 24,
+}
+
+Theme.Radius = {
+	Lg = UDim.new(0, 8),
+	Md = UDim.new(0, 6),
+	Sm = UDim.new(0, 4),
+	Xs = UDim.new(0, 2),
+}
+
+return Theme
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+</roblox>
