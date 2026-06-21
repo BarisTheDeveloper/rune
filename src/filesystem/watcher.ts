@@ -430,14 +430,15 @@ export class FileWatcher {
    * Handles file deletion
    */
   private handleFileDelete(filePath: string, relativePath: string): void {
-    const instanceId = this.fileToInstanceMap.get(relativePath);
+    const normalized = relativePath.replace(/\\/g, "/");
+    const instanceId = this.fileToInstanceMap.get(normalized);
 
     if (instanceId) {
       this.instanceTree.removeInstance(instanceId);
-      this.fileToInstanceMap.delete(relativePath);
+      this.fileToInstanceMap.delete(normalized);
       this.instanceToFileMap.delete(instanceId);
 
-      logger.info(`Instance deleted: ${relativePath}`);
+      logger.info(`Instance deleted: ${normalized}`);
 
       if (this.onInstanceDelete) {
         this.onInstanceDelete(instanceId);
@@ -449,8 +450,9 @@ export class FileWatcher {
    * Handles directory addition
    */
   private handleDirectoryAdd(relativePath: string): void {
+    const normalized = relativePath.replace(/\\/g, "/");
     // Check if this folder was already created by Studio sync (skip duplicate broadcast)
-    const alreadyMapped = this.fileToInstanceMap.has(relativePath);
+    const alreadyMapped = this.fileToInstanceMap.has(normalized);
 
     const parentId = this.getOrCreateFolderInstance(relativePath);
 
@@ -467,14 +469,15 @@ export class FileWatcher {
    * Handles directory deletion
    */
   private handleDirectoryDelete(relativePath: string): void {
-    const instanceId = this.fileToInstanceMap.get(relativePath);
+    const normalized = relativePath.replace(/\\/g, "/");
+    const instanceId = this.fileToInstanceMap.get(normalized);
 
     if (instanceId) {
       this.instanceTree.removeInstance(instanceId, true);
-      this.fileToInstanceMap.delete(relativePath);
+      this.fileToInstanceMap.delete(normalized);
       this.instanceToFileMap.delete(instanceId);
 
-      logger.info(`Directory deleted: ${relativePath}`);
+      logger.info(`Directory deleted: ${normalized}`);
 
       if (this.onInstanceDelete) {
         this.onInstanceDelete(instanceId);
