@@ -1,6 +1,6 @@
 /**
  * Rune - Build Command
- * Builds a Roblox place file from project files
+ * Builds a Roblox place file (.rbxlx) from project files
  */
 
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
@@ -14,9 +14,6 @@ import {
   isModelFile,
 } from "../utils/script-detector.js";
 
-/**
- * Collected instance interface
- */
 interface CollectedInstance {
   className: string;
   name: string;
@@ -24,15 +21,10 @@ interface CollectedInstance {
   source?: string;
 }
 
-/**
- * Builds the project into a .rbxlx file
- * @param options - Build command options
- */
 export async function buildCommand(options: BuildOptions): Promise<void> {
   logger.header("Rune - Build");
 
   try {
-    // Load configuration
     const configPath = ConfigManager.findNearest();
     if (!configPath) {
       logger.error("No rune.json found. Run 'rune init' first.");
@@ -43,14 +35,10 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     const projectRoot = configManager.getProjectRoot();
 
     logger.info(`Project: ${config.name}`);
-    logger.info(`Config: ${configPath}`);
 
-    // Determine output path
     const outputDir = options.output || join(projectRoot, "dist");
-    const placeName = "Game.rbxlx";
-    const outputPath = join(outputDir, placeName);
+    const outputPath = join(outputDir, "Game.rbxlx");
 
-    // Ensure output directory exists
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
     }
@@ -58,35 +46,22 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     logger.info(`Output: ${outputPath}`);
     logger.info("Building project...");
 
-    // Collect all files and build instance tree
     const instances = await collectInstances(projectRoot, config.folders);
+    const content = generateRbxlx(instances, config.name);
 
-    // Generate RBXLX XML
-    const rbxlxContent = generateRbxlxXml(instances, config.name);
-
-    // Write output file
-    writeFileSync(outputPath, rbxlxContent, "utf-8");
+    writeFileSync(outputPath, content, "utf-8");
 
     logger.separator();
     logger.success("Build complete!");
     logger.info(`Output: ${outputPath}`);
-    logger.info(`Instances: ${instances.length}`);
+    logger.info(`Instances: ${countInstances(instances)}`);
     logger.separator();
-
-    // Handle upload if requested
-    if (options.upload) {
-      logger.warn("Upload feature is not yet implemented.");
-      logger.info("Future support: rune build --upload");
-    }
   } catch (error) {
     logger.error(`Build failed: ${error}`);
     process.exit(1);
   }
 }
 
-/**
- * Collects all instances from the project folders
- */
 async function collectInstances(
   projectRoot: string,
   folders: Record<string, string>,
@@ -95,29 +70,22 @@ async function collectInstances(
 
   for (const [serviceName, folderPath] of Object.entries(folders)) {
     const fullPath = join(projectRoot, folderPath);
+    if (!existsSync(fullPath)) continue;
 
-    if (!existsSync(fullPath)) {
-      continue;
-    }
-
-    // Create service folder instance
-    const serviceInstance: CollectedInstance = {
-      className: serviceName,
+    const service: CollectedInstance = {
+      className: "Folder",
       name: serviceName,
       children: [],
     };
 
-    await scanDirectory(fullPath, folderPath, serviceInstance.children);
-    instances.push(serviceInstance);
+    await scanDir(fullPath, folderPath, service.children);
+    instances.push(service);
   }
 
   return instances;
 }
 
-/**
- * Recursively scans a directory for instances
- */
-async function scanDirectory(
+async function scanDir(
   dirPath: string,
   relativeBase: string,
   children: CollectedInstance[],
@@ -132,60 +100,41 @@ async function scanDirectory(
       const relativePath = join(relativeBase, entry.name);
 
       if (entry.isDirectory()) {
-        const folderInstance: CollectedInstance = {
+        const folder: CollectedInstance = {
           className: "Folder",
           name: entry.name,
           children: [],
         };
-
-        await scanDirectory(fullPath, relativePath, folderInstance.children);
-        children.push(folderInstance);
+        await scanDir(fullPath, relativePath, folder.children);
+        children.push(folder);
       } else if (entry.isFile()) {
-        const fileInstance = await createInstanceFromFile(fullPath, entry.name);
-        if (fileInstance) {
-          children.push(fileInstance);
-        }
+        const inst = await fileToInstance(fullPath, entry.name);
+        if (inst) children.push(inst);
       }
     }
   } catch (error) {
-    logger.error(`Failed to scan directory: ${dirPath}`);
+    logger.error(`Failed to scan: ${dirPath}`);
   }
 }
 
-/**
- * Creates an instance from a file
- */
-async function createInstanceFromFile(
+async function fileToInstance(
   filePath: string,
   fileName: string,
 ): Promise<CollectedInstance | null> {
-  // Handle script files
   if (isScriptFile(fileName)) {
-    const scriptInfo = detectScriptType(fileName);
-    const instanceName = scriptInfo.baseName;
-
+    const info = detectScriptType(fileName);
     try {
-      const content = readFileSync(filePath, "utf-8");
-
-      return {
-        className: scriptInfo.className,
-        name: instanceName,
-        children: [],
-        source: content,
-      };
-    } catch (error) {
-      logger.error(`Failed to read file: ${filePath}`);
+      const source = readFileSync(filePath, "utf-8");
+      return { className: info.className, name: info.baseName, children: [], source };
+    } catch {
       return null;
     }
   }
 
-  // Handle model files
   if (isModelFile(fileName)) {
-    const modelName = fileName.replace(/\.(rbxm|rbxmx)$/, "");
-
     return {
       className: "Folder",
-      name: modelName,
+      name: fileName.replace(/\.(rbxm|rbxmx)$/, ""),
       children: [],
     };
   }
@@ -193,81 +142,70 @@ async function createInstanceFromFile(
   return null;
 }
 
-/**
- * Generates RBXLX XML content
- */
-function generateRbxlxXml(
+function generateRbxlx(
   instances: CollectedInstance[],
   projectName: string,
 ): string {
+  let ref = 0;
+  const nextRef = () => `RBX${ref++}`;
+
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml +=
-    '<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">\n';
-
-  // Add project metadata
+  xml += '<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime"';
+  xml += ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"';
+  xml += ' xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd"';
+  xml += ' version="4">\n';
   xml += '  <Item class="Folder" referent="RBX0">\n';
-  xml += "    <Properties>\n";
-  xml += `    <string name="Name">${escapeXml(projectName)}</string>\n`;
-  xml += "    </Properties>\n";
+  xml += '    <Properties>\n';
+  xml += `      <string name="Name">${escapeXml(projectName)}</string>\n`;
+  xml += '    </Properties>\n';
 
-  // Add instances
-  let referentIndex = 1;
-  for (const instance of instances) {
-    xml += generateInstanceXml(instance, `RBX${referentIndex++}`, "    ");
+  for (const inst of instances) {
+    xml += renderInstance(inst, nextRef(), 2);
   }
 
-  xml += "  </Item>\n";
-  xml += "</roblox>\n";
-
+  xml += '  </Item>\n';
+  xml += '</roblox>\n';
   return xml;
 }
 
-/**
- * Generates XML for a single instance
- */
-function generateInstanceXml(
-  instance: CollectedInstance,
+function renderInstance(
+  inst: CollectedInstance,
   referent: string,
-  indent: string,
+  depth: number,
 ): string {
-  let xml = `${indent}<Item class="${instance.className}" referent="${referent}">\n`;
-  xml += `${indent}  <Properties>\n`;
-  xml += `${indent}    <string name="Name">${escapeXml(instance.name)}</string>\n`;
-  xml += `${indent}  </Properties>\n`;
+  const pad = "  ".repeat(depth);
+  let xml = `${pad}<Item class="${inst.className}" referent="${referent}">\n`;
+  xml += `${pad}  <Properties>\n`;
+  xml += `${pad}    <string name="Name">${escapeXml(inst.name)}</string>\n`;
+  xml += `${pad}  </Properties>\n`;
 
-  // Add source for scripts
-  if (instance.source) {
-    xml += `${indent}  <Content name="Source">\n`;
-    xml += `${indent}    <ProtectedString><![CDATA[${instance.source}]]></ProtectedString>\n`;
-    xml += `${indent}  </Content>\n`;
+  if (inst.source) {
+    xml += `${pad}  <Content name="Source">\n`;
+    xml += `${pad}    <ProtectedString><![CDATA[${inst.source}]]></ProtectedString>\n`;
+    xml += `${pad}  </Content>\n`;
   }
 
-  // Add children
-  let childIndex = 0;
-  for (const child of instance.children) {
-    const childReferent = `${referent}_${childIndex++}`;
-    xml += generateInstanceXml(child, childReferent, `${indent}  `);
+  for (let i = 0; i < inst.children.length; i++) {
+    xml += renderInstance(inst.children[i]!, `${referent}_${i}`, depth + 1);
   }
 
-  xml += `${indent}</Item>\n`;
-
+  xml += `${pad}</Item>\n`;
   return xml;
 }
 
-/**
- * Escapes XML special characters
- */
-function escapeXml(unsafe: string): string {
-  const AMP = String.fromCharCode(38);
-  const LT = String.fromCharCode(60);
-  const GT = String.fromCharCode(62);
-  const QUOT = String.fromCharCode(34);
-  const APOS = String.fromCharCode(39);
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  return unsafe
-    .replace(new RegExp(AMP, "g"), `${AMP}amp;`)
-    .replace(new RegExp(LT, "g"), `${AMP}lt;`)
-    .replace(new RegExp(GT, "g"), `${AMP}gt;`)
-    .replace(new RegExp(QUOT, "g"), `${AMP}quot;`)
-    .replace(new RegExp(APOS, "g"), `${AMP}apos;`);
+function countInstances(instances: CollectedInstance[]): number {
+  let count = instances.length;
+  for (const inst of instances) {
+    count += countInstances(inst.children);
+  }
+  return count;
 }

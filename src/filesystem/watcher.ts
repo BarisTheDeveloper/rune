@@ -5,7 +5,7 @@
 
 import chokidar from "chokidar";
 import type { FSWatcher } from "chokidar";
-import { readFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname, basename, extname } from "node:path";
 import type { InstanceDefinition, RobloxClassName } from "../types/index.js";
 import type { ScriptType } from "../utils/script-detector.js";
@@ -599,5 +599,45 @@ export class FileWatcher {
     } catch (error) {
       logger.error(`Failed to scan directory: ${dirPath}`);
     }
+  }
+
+  /**
+   * Writes script source back to file (bidirectional sync from Studio)
+   */
+  public writeScriptSource(instanceId: string, source: string): boolean {
+    const relativePath = this.instanceToFileMap.get(instanceId);
+    if (!relativePath) {
+      logger.warn(`No file mapping for instance: ${instanceId}`);
+      return false;
+    }
+
+    const fullPath = join(this.projectRoot, relativePath);
+    try {
+      // Temporarily unwatch to avoid re-triggering
+      if (this.watcher) {
+        this.watcher.unwatch(fullPath);
+      }
+
+      writeFileSync(fullPath, source, "utf-8");
+      logger.success(`Studio → File: ${relativePath}`);
+
+      // Re-watch after a short delay
+      if (this.watcher) {
+        setTimeout(() => {
+          this.watcher?.add(fullPath);
+        }, 500);
+      }
+      return true;
+    } catch (error) {
+      logger.error(`Failed to write file: ${fullPath}`);
+      return false;
+    }
+  }
+
+  /**
+   * Gets the file path for an instance ID
+   */
+  public getFilePathForInstance(instanceId: string): string | undefined {
+    return this.instanceToFileMap.get(instanceId);
   }
 }

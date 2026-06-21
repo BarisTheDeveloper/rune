@@ -119,7 +119,7 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
       const instance = instanceTree.getInstance(instanceId);
       if (instance) {
         logger.info(`Studio updated script: ${instance.name}`);
-        // In bidirectional sync, we would update the file here
+        fileWatcher.writeScriptSource(instanceId, source as string);
       }
     });
 
@@ -129,7 +129,7 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
         logger.info(
           `Studio updated property: ${propertyName} on ${instance.name}`,
         );
-        // In bidirectional sync, we would update the instance definition file here
+        // Property changes could be written to instance definition JSON files
       }
     });
 
