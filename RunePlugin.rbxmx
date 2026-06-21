@@ -546,6 +546,7 @@ function InstanceSync:CreateOrUpdateInstance(data, isInitialSync)
 			existingChild.Source = data.source
 		end
 		self:UpdateInstance(existingChild, data)
+		self:HookScriptListener(existingChild)
 		return existingChild
 	end
 
@@ -615,6 +616,7 @@ function InstanceSync:CreateOrUpdateInstance(data, isInitialSync)
 
 	instance.Parent = parent
 	self.InstanceMap[data.id] = instance
+	self:HookScriptListener(instance)
 
 	return instance
 end
@@ -723,6 +725,15 @@ function InstanceSync:UndoLastChange()
 end
 
 -- ===== STUDIO LISTENERS =====
+
+function InstanceSync:HookScriptListener(instance)
+	if instance:IsA("LuaSourceContainer") then
+		instance:GetPropertyChangedSignal("Source"):Connect(function()
+			if not self.Enabled then return end
+			self:NotifyScriptSourceChanged(instance)
+		end)
+	end
+end
 
 -- Check if instance is a GUI element that should NOT be synced
 local function isGuiElement(instance)
