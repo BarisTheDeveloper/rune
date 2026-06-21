@@ -180,15 +180,22 @@ function InstanceSync:HandleInstanceDeleted(data)
 	local id = data.id
 	local instance = self.InstanceMap[id]
 
-	if instance and instance.Parent then
-		self:PushUndo(id, { id = id, name = instance.Name, className = instance.ClassName })
-		instance:Destroy()
+	if not instance then
+		self.MainWindow:LogActivity("warn", "Delete unknown: " .. tostring(id))
+		return
 	end
 
+	-- Remove from map BEFORE destroying to prevent feedback loop
 	self.InstanceMap[id] = nil
 	self.MainWindow:RemoveFileNode(id)
 	self.InstanceCount = math.max(0, self.InstanceCount - 1)
 	self.MainWindow:SetInstanceCount(self.InstanceCount)
+
+	if instance.Parent then
+		self:PushUndo(id, { id = id, name = instance.Name, className = instance.ClassName })
+		instance:Destroy()
+	end
+
 	self.MainWindow:LogActivity("warn", "Deleted: " .. (data.name or id))
 	self.MainWindow:EnableUndo(true)
 end
