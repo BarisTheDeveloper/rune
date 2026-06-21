@@ -448,10 +448,12 @@ export class FileWatcher {
    * Handles directory addition
    */
   private handleDirectoryAdd(relativePath: string): void {
+    // Check if this folder was already created by Studio sync (skip duplicate broadcast)
+    const alreadyMapped = this.fileToInstanceMap.has(relativePath);
+
     const parentId = this.getOrCreateFolderInstance(relativePath);
 
-    // Only broadcast if this is a genuinely new folder (not created by Studio sync)
-    const alreadyMapped = this.fileToInstanceMap.has(relativePath);
+    // Only broadcast if genuinely new (not from Studio → FS sync)
     if (!alreadyMapped && parentId && this.onInstanceCreate) {
       const folderInst = this.instanceTree.getInstance(parentId);
       if (folderInst) {
