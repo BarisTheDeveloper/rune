@@ -25,6 +25,7 @@ export class SyncServer {
 
   // Polling support: message queue for HTTP polling clients
   private pollMessages: Map<string, WSMessage[]> = new Map();
+  private pollingClients: Set<string> = new Set();
 
   // Event callbacks
   private onClientConnect?: (clientId: string) => void;
@@ -190,7 +191,11 @@ export class SyncServer {
 
     if (url === "/poll") {
       const messages = this.pollMessages.get(clientId) || [];
-      this.pollMessages.set(clientId, []); // Clear after sending
+      this.pollMessages.set(clientId, []);
+      // Track this polling client for broadcasts
+      if (!this.pollingClients.has(clientId)) {
+        this.pollingClients.add(clientId);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(messages));
       return;
@@ -501,15 +506,17 @@ export class SyncServer {
    */
   public broadcast(message: WSMessage): void {
     const messageStr = JSON.stringify(message);
+    // Send to WebSocket clients
     for (const [clientId, ws] of Array.from(this.clients.entries())) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(messageStr);
-      } else {
-        // Queue for polling
-        const queued = this.pollMessages.get(clientId) || [];
-        queued.push(message);
-        this.pollMessages.set(clientId, queued);
       }
+    }
+    // Also queue for all known polling clients
+    for (const clientId of Array.from(this.pollingClients)) {
+      const queued = this.pollMessages.get(clientId) || [];
+      queued.push(message);
+      this.pollMessages.set(clientId, queued);
     }
   }
 
