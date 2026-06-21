@@ -4,10 +4,19 @@
     "$className": "Folder",
     "RunePlugin": {
       "$className": "Folder",
-      "main": {
+      "Main": {
         "$path": "src/main.server.lua"
       },
-      "ui": {
+      "Sync": {
+        "$className": "Folder",
+        "WebSocketClient": {
+          "$path": "src/sync/WebSocketClient.lua"
+        },
+        "InstanceSync": {
+          "$path": "src/sync/InstanceSync.lua"
+        }
+      },
+      "UI": {
         "$className": "Folder",
         "MainWindow": {
           "$path": "src/ui/MainWindow.lua"
@@ -19,16 +28,7 @@
           "$path": "src/ui/StatusBar.lua"
         }
       },
-      "sync": {
-        "$className": "Folder",
-        "WebSocketClient": {
-          "$path": "src/sync/WebSocketClient.lua"
-        },
-        "InstanceSync": {
-          "$path": "src/sync/InstanceSync.lua"
-        }
-      },
-      "utils": {
+      "Utils": {
         "$className": "Folder",
         "Theme": {
           "$path": "src/utils/Theme.lua"

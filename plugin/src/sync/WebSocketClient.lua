@@ -58,39 +58,88 @@ function WebSocketClient.new(host, port)
 end
 
 function WebSocketClient:Connect()
-	-- Check if WebSocket API is available
-	if not WebSocket then
-		self.OnError:Fire("WebSocket API not available in this Roblox version. Please update Roblox Studio to the latest version.")
-		return
-	end
-
 	local url = string.format("ws://%s:%d", self.Host, self.Port)
+
+	-- Check if WebSocket API is available
+	if WebSocket then
+		-- Use native WebSocket API
+		task.spawn(function()
+			local success, result = pcall(function()
+				self.Socket = WebSocket.connect(url)
+
+				if not self.Socket then
+					error("Failed to create WebSocket connection")
+				end
+
+				self.Socket.OnMessage:Connect(function(message)
+					self:HandleMessage(message)
+				end)
+
+				self.Socket.OnClose:Connect(function()
+					self:HandleDisconnect()
+				end)
+
+				self.Connected = true
+				self.ReconnectAttempts = 0
+				self.OnConnected:Fire()
+			end)
+
+			if not success then
+				self.OnError:Fire(tostring(result))
+				self:AttemptReconnect()
+			end
+		end)
+	else
+		-- Fallback: Use HTTP polling
+		self:ConnectWithPolling()
+	end
+end
+
+function WebSocketClient:ConnectWithPolling()
+	-- Use port+1 for HTTP polling (WebSocket is on main port)
+	local httpPort = self.Port + 1
 
 	task.spawn(function()
 		local success, result = pcall(function()
-			-- Roblox WebSocket API
-			self.Socket = WebSocket.connect(url)
-
-			if not self.Socket then
-				error("Failed to create WebSocket connection")
-			end
-
-			self.Socket.OnMessage:Connect(function(message)
-				self:HandleMessage(message)
-			end)
-
-			self.Socket.OnClose:Connect(function()
-				self:HandleDisconnect()
-			end)
+			-- Test connection with HTTP GET
+			local testUrl = string.format("http://%s:%d/health", self.Host, httpPort)
+			local response = HttpService:GetAsync(testUrl, false)
 
 			self.Connected = true
 			self.ReconnectAttempts = 0
 			self.OnConnected:Fire()
+
+			-- Start polling loop
+			self:StartPolling(httpPort)
 		end)
 
 		if not success then
-			self.OnError:Fire(tostring(result))
+			self.OnError:Fire("HTTP polling fallback failed: " .. tostring(result))
 			self:AttemptReconnect()
+		end
+	end)
+end
+
+function WebSocketClient:StartPolling(httpPort)
+	task.spawn(function()
+		while self.Connected do
+			local success, result = pcall(function()
+				local pollUrl = string.format("http://%s:%d/poll", self.Host, httpPort)
+				local response = HttpService:GetAsync(pollUrl, false)
+
+				if response and response ~= "" then
+					local messages = HttpService:JSONDecode(response)
+					for _, message in ipairs(messages) do
+						self:HandleMessage(HttpService:JSONEncode(message))
+					end
+				end
+			end)
+
+			if not success then
+				-- Silently ignore polling errors, will reconnect if persistent
+			end
+
+			task.wait(0.5) -- Poll every 500ms
 		end
 	end)
 end

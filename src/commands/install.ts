@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { InstallOptions, RunePackage } from "../types/index.js";
 import { logger } from "../utils/logger.js";
+import { buildRbxmx } from "../utils/rbxmx-builder.js";
 import { execSync } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -151,18 +152,16 @@ async function installRunePlugin(options: InstallOptions): Promise<void> {
     return;
   }
 
-  // Copy plugin files
+  // Build plugin with Rune's own RBXMX builder (no Rojo dependency)
   const pluginTarget = join(targetDir, "RunePlugin.rbxm");
+  const pluginSrcDir = join(pluginSourceDir, "src");
 
-  // Build with Rojo if available
-  const rojoProject = join(pluginSourceDir, "default.project.json");
-  if (existsSync(rojoProject)) {
+  if (existsSync(pluginSrcDir)) {
     try {
-      execSync(`rojo build "${rojoProject}" -o "${pluginTarget}"`, {
-        stdio: "pipe",
-      });
+      buildRbxmx(pluginSrcDir, pluginTarget, "RunePlugin");
       logger.success(`Plugin built: ${pluginTarget}`);
-    } catch {
+    } catch (error) {
+      logger.error(`Plugin build failed: ${error}`);
       // Fallback: copy source files
       copyPluginSource(pluginSourceDir, targetDir);
     }

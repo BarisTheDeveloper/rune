@@ -1,0 +1,1709 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<roblox version="4">
+  <Item class="Folder" referent="RBX00000001">
+    <Properties>
+      <string name="Name">RunePlugin</string>
+    </Properties>
+    <Item class="Folder" referent="RBX00000002">
+      <Properties>
+        <string name="Name">Chat</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000003">
+      <Properties>
+        <string name="Name">Lighting</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000004">
+      <Properties>
+        <string name="Name">LocalizationService</string>
+      </Properties>
+    </Item>
+    <Item class="ModuleScript" referent="RBX00000005">
+      <Properties>
+        <string name="Name">main</string>
+        <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin
+	Modern Roblox Studio plugin for bidirectional synchronization with Rune CLI
+]]
+
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local Selection = game:GetService("Selection")
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
+
+-- Plugin setup
+local toolbar = plugin:CreateToolbar("Rune")
+local toggleButton = toolbar:CreateButton(
+	"Rune Sync",
+	"Toggle Rune Sync Panel",
+	"rbxassetid://6031071053"
+)
+
+-- Load modules
+local Theme = require(script.Parent.utils.Theme)
+local WebSocketClient = require(script.Parent.sync.WebSocketClient)
+local InstanceSync = require(script.Parent.sync.InstanceSync)
+local MainWindow = require(script.Parent.ui.MainWindow)
+
+-- State
+local isOpen = false
+local mainWindow = nil
+local wsClient = nil
+local syncHandler = nil
+
+-- Initialize plugin
+local function initialize()
+	mainWindow = MainWindow.new(plugin)
+	mainWindow.OnConnectRequested:Connect(function(host, port)
+		connectToRune(host, port)
+	end)
+	mainWindow.OnDisconnectRequested:Connect(function()
+		disconnectFromRune()
+	end)
+	mainWindow.OnSyncToggle:Connect(function(enabled)
+		if syncHandler then
+			syncHandler:SetEnabled(enabled)
+		end
+	end)
+end
+
+-- Connect to Rune CLI
+function connectToRune(host, port)
+	if wsClient and wsClient:IsConnected() then
+		wsClient:Disconnect()
+	end
+
+	wsClient = WebSocketClient.new(host, port)
+	syncHandler = InstanceSync.new(wsClient, mainWindow)
+
+	wsClient.OnConnected:Connect(function()
+		mainWindow:SetStatus("Connected", Theme.Colors.Success)
+		mainWindow:SetConnectionState(true)
+		syncHandler:RequestSync()
+	end)
+
+	wsClient.OnDisconnected:Connect(function()
+		mainWindow:SetStatus("Disconnected", Theme.Colors.Error)
+		mainWindow:SetConnectionState(false)
+	end)
+
+	wsClient.OnMessageReceived:Connect(function(message)
+		syncHandler:HandleMessage(message)
+	end)
+
+	wsClient.OnError:Connect(function(err)
+		mainWindow:SetStatus("Error: " .. tostring(err), Theme.Colors.Error)
+	end)
+
+	mainWindow:SetStatus("Connecting...", Theme.Colors.Warning)
+	wsClient:Connect()
+end
+
+-- Disconnect from Rune
+function disconnectFromRune()
+	if wsClient then
+		wsClient:Disconnect()
+		wsClient = nil
+	end
+	if syncHandler then
+		syncHandler:Destroy()
+		syncHandler = nil
+	end
+	mainWindow:SetStatus("Disconnected", Theme.Colors.TextMuted)
+	mainWindow:SetConnectionState(false)
+end
+
+-- Toggle window
+toggleButton.Click:Connect(function()
+	isOpen = not isOpen
+	if isOpen then
+		if not mainWindow then
+			initialize()
+		end
+		mainWindow:Show()
+	else
+		if mainWindow then
+			mainWindow:Hide()
+		end
+	end
+	toggleButton:SetActive(isOpen)
+end)
+
+-- Cleanup on plugin unload
+plugin.Unloading:Connect(function()
+	disconnectFromRune()
+	if mainWindow then
+		mainWindow:Destroy()
+	end
+end)
+
+-- Auto-open if previously open
+if plugin:GetSetting("Rune_IsOpen") then
+	isOpen = true
+	initialize()
+	mainWindow:Show()
+	toggleButton:SetActive(true)
+end
+
+print("[Rune] Studio plugin loaded")]]></ProtectedString>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000006">
+      <Properties>
+        <string name="Name">MaterialService</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000007">
+      <Properties>
+        <string name="Name">Players</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000008">
+      <Properties>
+        <string name="Name">ReplicatedFirst</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000009">
+      <Properties>
+        <string name="Name">ReplicatedStorage</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000010">
+        <Properties>
+          <string name="Name">Shared</string>
+          <ProtectedString name="Source"><![CDATA[-- Shared Module
+-- Created by Rune
+
+local Shared = {}
+
+-- Add your shared code here
+
+return Shared
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000011">
+      <Properties>
+        <string name="Name">ServerScriptService</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000012">
+        <Properties>
+          <string name="Name">Main</string>
+          <ProtectedString name="Source"><![CDATA[-- Main Server Script
+-- Created by Rune
+
+print("Hello from Rune!")
+
+-- Your server-side code here
+]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000013">
+      <Properties>
+        <string name="Name">ServerStorage</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000014">
+      <Properties>
+        <string name="Name">SoundService</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000015">
+      <Properties>
+        <string name="Name">StarterGui</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000016">
+      <Properties>
+        <string name="Name">StarterPack</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000017">
+      <Properties>
+        <string name="Name">StarterPlayer</string>
+      </Properties>
+      <Item class="Folder" referent="RBX00000018">
+        <Properties>
+          <string name="Name">StarterCharacterScripts</string>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="RBX00000019">
+        <Properties>
+          <string name="Name">StarterPlayerScripts</string>
+        </Properties>
+        <Item class="ModuleScript" referent="RBX00000020">
+          <Properties>
+            <string name="Name">Client</string>
+            <ProtectedString name="Source"><![CDATA[-- Client Script
+-- Created by Rune
+
+print("Hello from the client!")
+
+-- Your client-side code here
+]]></ProtectedString>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000021">
+      <Properties>
+        <string name="Name">sync</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000022">
+        <Properties>
+          <string name="Name">InstanceSync</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Instance Sync
+	Handles bidirectional synchronization between filesystem and Roblox Studio
+]]
+
+local HttpService = game:GetService("HttpService")
+local ChangeHistoryService = game:GetService("ChangeHistoryService")
+
+local InstanceSync = {}
+InstanceSync.__index = InstanceSync
+
+-- Roblox service mapping
+local SERVICE_MAP = {
+	Workspace = game.Workspace,
+	Players = game.Players,
+	Lighting = game.Lighting,
+	MaterialService = game.MaterialService,
+	ReplicatedFirst = game.ReplicatedFirst,
+	ReplicatedStorage = game.ReplicatedStorage,
+	ServerScriptService = game.ServerScriptService,
+	ServerStorage = game.ServerStorage,
+	StarterGui = game.StarterGui,
+	StarterPack = game.StarterPack,
+	StarterPlayer = game.StarterPlayer,
+	SoundService = game.SoundService,
+	Teams = game.Teams,
+	TextChatService = game.TextChatService,
+	Chat = game.Chat,
+	LocalizationService = game.LocalizationService,
+}
+
+function InstanceSync.new(webSocketClient, mainWindow)
+	local self = setmetatable({}, InstanceSync)
+
+	self.WebSocket = webSocketClient
+	self.MainWindow = mainWindow
+	self.Enabled = true
+	self.InstanceMap = {} -- Maps Rune IDs to Roblox instances
+	self.PendingChanges = {}
+
+	-- Listen for Studio changes
+	self:SetupStudioListeners()
+
+	return self
+end
+
+function InstanceSync:SetEnabled(enabled)
+	self.Enabled = enabled
+end
+
+function InstanceSync:RequestSync()
+	if not self.Enabled then return end
+
+	self.WebSocket:Send({
+		type = "request_sync",
+		timestamp = os.time(),
+	})
+end
+
+function InstanceSync:HandleMessage(message)
+	if not self.Enabled then return end
+
+	local msgType = message.type
+
+	if msgType == "full_sync" then
+		self:HandleFullSync(message.data)
+	elseif msgType == "instance_created" then
+		self:HandleInstanceCreated(message.data)
+	elseif msgType == "instance_updated" then
+		self:HandleInstanceUpdated(message.data)
+	elseif msgType == "instance_deleted" then
+		self:HandleInstanceDeleted(message.data)
+	elseif msgType == "instance_moved" then
+		self:HandleInstanceMoved(message.data)
+	elseif msgType == "instance_renamed" then
+		self:HandleInstanceRenamed(message.data)
+	elseif msgType == "property_changed" then
+		self:HandlePropertyChanged(message.data)
+	elseif msgType == "script_source" then
+		self:HandleScriptSource(message.data)
+	elseif msgType == "sync_complete" then
+		self.MainWindow:SetStatus("Sync complete", nil)
+	elseif msgType == "error" then
+		warn("[Rune] Server error: " .. tostring(message.error))
+	end
+end
+
+function InstanceSync:HandleFullSync(data)
+	self.MainWindow:SetStatus("Receiving sync data...", nil)
+
+	-- Clear existing synced instances
+	self.InstanceMap = {}
+
+	-- Build tree from root nodes
+	if data.instances then
+		for _, instanceData in ipairs(data.instances) do
+			self:CreateOrUpdateInstance(instanceData)
+		end
+	end
+
+	-- Update file tree UI
+	self.MainWindow:UpdateFileTree(data.instances)
+
+	self.MainWindow:SetStatus("Sync complete - " .. (data.count or 0) .. " instances", nil)
+end
+
+function InstanceSync:HandleInstanceCreated(data)
+	local instance = self:CreateOrUpdateInstance(data)
+	if instance then
+		self.MainWindow:AddFileNode(data.parentId, data)
+	end
+end
+
+function InstanceSync:HandleInstanceUpdated(data)
+	self:CreateOrUpdateInstance(data)
+end
+
+function InstanceSync:HandleInstanceDeleted(data)
+	local instance = self.InstanceMap[data.id]
+	if instance and instance.Parent then
+		instance:Destroy()
+	end
+	self.InstanceMap[data.id] = nil
+	self.MainWindow:RemoveFileNode(data.id)
+end
+
+function InstanceSync:HandleInstanceMoved(data)
+	local instance = self.InstanceMap[data.id]
+	if not instance then return end
+
+	local newParent = self:FindParent(data.newParentId)
+	if newParent then
+		instance.Parent = newParent
+	end
+end
+
+function InstanceSync:HandleInstanceRenamed(data)
+	local instance = self.InstanceMap[data.id]
+	if instance then
+		instance.Name = data.newName
+	end
+end
+
+function InstanceSync:HandlePropertyChanged(data)
+	local instance = self.InstanceMap[data.instanceId]
+	if not instance then return end
+
+	local propName = data.property
+	local propValue = data.value
+
+	pcall(function()
+		instance[propName] = propValue
+	end)
+end
+
+function InstanceSync:HandleScriptSource(data)
+	local instance = self.InstanceMap[data.id]
+	if not instance then return end
+
+	if instance:IsA("LuaSourceContainer") then
+		instance.Source = data.source
+	end
+end
+
+function InstanceSync:CreateOrUpdateInstance(data)
+	if not self.Enabled then return nil end
+
+	-- Check if instance already exists
+	local existing = self.InstanceMap[data.id]
+	if existing then
+		self:UpdateInstance(existing, data)
+		return existing
+	end
+
+	-- Find or create parent
+	local parent = self:FindParent(data.parentId)
+	if not parent then
+		-- Try to find service by name
+		parent = SERVICE_MAP[data.parentName]
+	end
+
+	if not parent then
+		warn("[Rune] Parent not found for: " .. tostring(data.name))
+		return nil
+	end
+
+	-- Create instance
+	local className = data.className or "Folder"
+	local instance = nil
+
+	local success, result = pcall(function()
+		if className == "Script" or className == "LocalScript" or className == "ModuleScript" then
+			instance = Instance.new(className)
+		elseif className == "Folder" then
+			instance = Instance.new("Folder")
+		elseif className == "Model" then
+			instance = Instance.new("Model")
+		elseif className == "Part" then
+			instance = Instance.new("Part")
+		elseif className == "MeshPart" then
+			instance = Instance.new("MeshPart")
+		elseif className == "UnionOperation" then
+			instance = Instance.new("UnionOperation")
+		elseif className == "Decal" then
+			instance = Instance.new("Decal")
+		elseif className == "Texture" then
+			instance = Instance.new("Texture")
+		elseif className == "Sound" then
+			instance = Instance.new("Sound")
+		elseif className == "Animation" then
+			instance = Instance.new("Animation")
+		elseif className == "ScreenGui" then
+			instance = Instance.new("ScreenGui")
+		elseif className == "Frame" then
+			instance = Instance.new("Frame")
+		elseif className == "TextLabel" then
+			instance = Instance.new("TextLabel")
+		elseif className == "TextButton" then
+			instance = Instance.new("TextButton")
+		elseif className == "ImageLabel" then
+			instance = Instance.new("ImageLabel")
+		elseif className == "ImageButton" then
+			instance = Instance.new("ImageButton")
+		elseif className == "IntValue" then
+			instance = Instance.new("IntValue")
+		elseif className == "StringValue" then
+			instance = Instance.new("StringValue")
+		elseif className == "BoolValue" then
+			instance = Instance.new("BoolValue")
+		elseif className == "NumberValue" then
+			instance = Instance.new("NumberValue")
+		elseif className == "Color3Value" then
+			instance = Instance.new("Color3Value")
+		elseif className == "Vector3Value" then
+			instance = Instance.new("Vector3Value")
+		elseif className == "Configuration" then
+			instance = Instance.new("Configuration")
+		else
+			instance = Instance.new("Folder")
+		end
+	end)
+
+	if not success or not instance then
+		warn("[Rune] Failed to create instance: " .. tostring(className))
+		return nil
+	end
+
+	-- Set name
+	instance.Name = data.name or "NewInstance"
+
+	-- Set properties
+	if data.properties then
+		for propName, propData in pairs(data.properties) do
+			pcall(function()
+				if typeof(propData.value) == "Color3" then
+					instance[propName] = Color3.new(
+						propData.value.r or 1,
+						propData.value.g or 1,
+						propData.value.b or 1
+					)
+				elseif typeof(propData.value) == "Vector3" then
+					instance[propName] = Vector3.new(
+						propData.value.x or 0,
+						propData.value.y or 0,
+						propData.value.z or 0
+					)
+				else
+					instance[propName] = propData.value
+				end
+			end)
+		end
+	end
+
+	-- Set source for scripts
+	if data.source and instance:IsA("LuaSourceContainer") then
+		instance.Source = data.source
+	end
+
+	-- Set attributes
+	if data.attributes then
+		for attrName, attrValue in pairs(data.attributes) do
+			pcall(function()
+				instance:SetAttribute(attrName, attrValue)
+			end)
+		end
+	end
+
+	-- Set tags
+	if data.tags then
+		for _, tag in ipairs(data.tags) do
+			pcall(function()
+				instance:AddTag(tag)
+			end)
+		end
+	end
+
+	-- Parent the instance
+	instance.Parent = parent
+
+	-- Store in map
+	self.InstanceMap[data.id] = instance
+
+	return instance
+end
+
+function InstanceSync:UpdateInstance(instance, data)
+	-- Update name
+	if data.name and instance.Name ~= data.name then
+		instance.Name = data.name
+	end
+
+	-- Update properties
+	if data.properties then
+		for propName, propData in pairs(data.properties) do
+			pcall(function()
+				instance[propName] = propData.value
+			end)
+		end
+	end
+
+	-- Update source
+	if data.source and instance:IsA("LuaSourceContainer") then
+		instance.Source = data.source
+	end
+
+	-- Update attributes
+	if data.attributes then
+		for attrName, attrValue in pairs(data.attributes) do
+			pcall(function()
+				instance:SetAttribute(attrName, attrValue)
+			end)
+		end
+	end
+end
+
+function InstanceSync:FindParent(parentId)
+	if not parentId then
+		return game
+	end
+
+	local parent = self.InstanceMap[parentId]
+	if parent then
+		return parent
+	end
+
+	-- Check if it's a service name
+	return SERVICE_MAP[parentId]
+end
+
+function InstanceSync:SetupStudioListeners()
+	-- Listen for instance changes in Studio
+	game.DescendantAdded:Connect(function(instance)
+		if not self.Enabled then return end
+		if self:IsSyncedInstance(instance) then return end
+
+		-- Notify server of new instance
+		self:NotifyInstanceCreated(instance)
+	end)
+
+	game.DescendantRemoving:Connect(function(instance)
+		if not self.Enabled then return end
+		if not self:IsSyncedInstance(instance) then return end
+
+		-- Notify server of removed instance
+		self:NotifyInstanceDeleted(instance)
+	end)
+end
+
+function InstanceSync:IsSyncedInstance(instance)
+	for _, synced in pairs(self.InstanceMap) do
+		if synced == instance then
+			return true
+		end
+	end
+	return false
+end
+
+function InstanceSync:NotifyInstanceCreated(instance)
+	-- Debounce to avoid spam
+	task.delay(0.5, function()
+		if not instance or not instance.Parent then return end
+
+		local data = self:SerializeInstance(instance)
+		if data then
+			self.WebSocket:Send({
+				type = "studio_instance_created",
+				data = data,
+			})
+		end
+	end)
+end
+
+function InstanceSync:NotifyInstanceDeleted(instance)
+	for id, synced in pairs(self.InstanceMap) do
+		if synced == instance then
+			self.InstanceMap[id] = nil
+			self.WebSocket:Send({
+				type = "studio_instance_deleted",
+				data = { id = id },
+			})
+			break
+		end
+	end
+end
+
+function InstanceSync:SerializeInstance(instance)
+	local className = instance.ClassName
+
+	-- Only sync supported types
+	local supported = {
+		Folder = true,
+		Script = true,
+		LocalScript = true,
+		ModuleScript = true,
+		Model = true,
+		Part = true,
+		MeshPart = true,
+		UnionOperation = true,
+		Decal = true,
+		Texture = true,
+		Sound = true,
+		Animation = true,
+		ScreenGui = true,
+		Frame = true,
+		TextLabel = true,
+		TextButton = true,
+		ImageLabel = true,
+		ImageButton = true,
+		IntValue = true,
+		StringValue = true,
+		BoolValue = true,
+		NumberValue = true,
+		Color3Value = true,
+		Vector3Value = true,
+		Configuration = true,
+	}
+
+	if not supported[className] then
+		return nil
+	end
+
+	local data = {
+		name = instance.Name,
+		className = className,
+	}
+
+	-- Get source for scripts
+	if instance:IsA("LuaSourceContainer") then
+		data.source = instance.Source
+	end
+
+	-- Get attributes
+	local attributes = instance:GetAttributes()
+	if next(attributes) then
+		data.attributes = attributes
+	end
+
+	-- Get tags
+	local tags = instance:GetTags()
+	if #tags > 0 then
+		data.tags = tags
+	end
+
+	return data
+end
+
+function InstanceSync:Destroy()
+	self.Enabled = false
+	self.InstanceMap = {}
+end
+
+return InstanceSync]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000023">
+        <Properties>
+          <string name="Name">WebSocketClient</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - WebSocket Client
+	Handles WebSocket connection to Rune CLI server
+]]
+
+local HttpService = game:GetService("HttpService")
+
+local WebSocketClient = {}
+WebSocketClient.__index = WebSocketClient
+
+-- Simple signal implementation
+local Signal = {}
+Signal.__index = Signal
+
+function Signal.new()
+	local self = setmetatable({}, Signal)
+	self._connections = {}
+	return self
+end
+
+function Signal:Connect(callback)
+	table.insert(self._connections, callback)
+	return {
+		Disconnect = function()
+			for i, conn in ipairs(self._connections) do
+				if conn == callback then
+					table.remove(self._connections, i)
+					break
+				end
+			end
+		end
+	}
+end
+
+function Signal:Fire(...)
+	for _, callback in ipairs(self._connections) do
+		task.spawn(callback, ...)
+	end
+end
+
+function WebSocketClient.new(host, port)
+	local self = setmetatable({}, WebSocketClient)
+
+	self.Host = host or "localhost"
+	self.Port = port or 34872
+	self.Connected = false
+	self.Socket = nil
+	self.ReconnectAttempts = 0
+	self.MaxReconnectAttempts = 5
+
+	-- Events
+	self.OnConnected = Signal.new()
+	self.OnDisconnected = Signal.new()
+	self.OnMessageReceived = Signal.new()
+	self.OnError = Signal.new()
+
+	return self
+end
+
+function WebSocketClient:Connect()
+	local url = string.format("ws://%s:%d", self.Host, self.Port)
+
+	-- Check if WebSocket API is available
+	if WebSocket then
+		-- Use native WebSocket API
+		task.spawn(function()
+			local success, result = pcall(function()
+				self.Socket = WebSocket.connect(url)
+
+				if not self.Socket then
+					error("Failed to create WebSocket connection")
+				end
+
+				self.Socket.OnMessage:Connect(function(message)
+					self:HandleMessage(message)
+				end)
+
+				self.Socket.OnClose:Connect(function()
+					self:HandleDisconnect()
+				end)
+
+				self.Connected = true
+				self.ReconnectAttempts = 0
+				self.OnConnected:Fire()
+			end)
+
+			if not success then
+				self.OnError:Fire(tostring(result))
+				self:AttemptReconnect()
+			end
+		end)
+	else
+		-- Fallback: Use HTTP polling
+		self:ConnectWithPolling()
+	end
+end
+
+function WebSocketClient:ConnectWithPolling()
+	-- Use port+1 for HTTP polling (WebSocket is on main port)
+	local httpPort = self.Port + 1
+
+	task.spawn(function()
+		local success, result = pcall(function()
+			-- Test connection with HTTP GET
+			local testUrl = string.format("http://%s:%d/health", self.Host, httpPort)
+			local response = HttpService:GetAsync(testUrl, false)
+
+			self.Connected = true
+			self.ReconnectAttempts = 0
+			self.OnConnected:Fire()
+
+			-- Start polling loop
+			self:StartPolling(httpPort)
+		end)
+
+		if not success then
+			self.OnError:Fire("HTTP polling fallback failed: " .. tostring(result))
+			self:AttemptReconnect()
+		end
+	end)
+end
+
+function WebSocketClient:StartPolling(httpPort)
+	task.spawn(function()
+		while self.Connected do
+			local success, result = pcall(function()
+				local pollUrl = string.format("http://%s:%d/poll", self.Host, httpPort)
+				local response = HttpService:GetAsync(pollUrl, false)
+
+				if response and response ~= "" then
+					local messages = HttpService:JSONDecode(response)
+					for _, message in ipairs(messages) do
+						self:HandleMessage(HttpService:JSONEncode(message))
+					end
+				end
+			end)
+
+			if not success then
+				-- Silently ignore polling errors, will reconnect if persistent
+			end
+
+			task.wait(0.5) -- Poll every 500ms
+		end
+	end)
+end
+
+function WebSocketClient:Disconnect()
+	self.Connected = false
+	if self.Socket then
+		pcall(function()
+			self.Socket:Close()
+		end)
+		self.Socket = nil
+	end
+	self.OnDisconnected:Fire()
+end
+
+function WebSocketClient:IsConnected()
+	return self.Connected and self.Socket ~= nil
+end
+
+function WebSocketClient:Send(message)
+	if not self:IsConnected() then
+		warn("[Rune] Cannot send message: not connected")
+		return false
+	end
+
+	local success, result = pcall(function()
+		local json = HttpService:JSONEncode(message)
+		self.Socket:Send(json)
+	end)
+
+	if not success then
+		self.OnError:Fire(result)
+		return false
+	end
+
+	return true
+end
+
+function WebSocketClient:HandleMessage(rawMessage)
+	local success, message = pcall(function()
+		return HttpService:JSONDecode(rawMessage)
+	end)
+
+	if success and message then
+		self.OnMessageReceived:Fire(message)
+	else
+		self.OnError:Fire("Failed to parse message: " .. tostring(rawMessage))
+	end
+end
+
+function WebSocketClient:HandleDisconnect()
+	self.Connected = false
+	self.Socket = nil
+	self.OnDisconnected:Fire()
+
+	-- Attempt reconnection
+	self:AttemptReconnect()
+end
+
+function WebSocketClient:AttemptReconnect()
+	if self.ReconnectAttempts >= self.MaxReconnectAttempts then
+		self.OnError:Fire("Max reconnection attempts reached")
+		return
+	end
+
+	self.ReconnectAttempts = self.ReconnectAttempts + 1
+	task.delay(2 ^ self.ReconnectAttempts, function()
+		if not self.Connected then
+			self:Connect()
+		end
+	end)
+end
+
+return WebSocketClient]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000024">
+      <Properties>
+        <string name="Name">Teams</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000025">
+      <Properties>
+        <string name="Name">TextChatService</string>
+      </Properties>
+    </Item>
+    <Item class="Folder" referent="RBX00000026">
+      <Properties>
+        <string name="Name">ui</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000027">
+        <Properties>
+          <string name="Name">FileTree</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - File Tree
+	Visual tree display of synced folders and files
+]]
+
+local Theme = require(script.Parent.Parent.utils.Theme)
+
+local FileTree = {}
+FileTree.__index = FileTree
+
+function FileTree.new(parentFrame)
+	local self = setmetatable({}, FileTree)
+
+	self.ParentFrame = parentFrame
+	self.Nodes = {}
+	self.ExpandedNodes = {}
+	self.NodeFrames = {}
+
+	self:BuildContainer()
+
+	return self
+end
+
+function FileTree:BuildContainer()
+	local theme = Theme
+
+	-- Container for all nodes
+	self.Container = Instance.new("Frame")
+	self.Container.Name = "TreeContainer"
+	self.Container.Size = UDim2.new(1, 0, 1, 0)
+	self.Container.BackgroundTransparency = 1
+	self.Container.BorderSizePixel = 0
+	self.Container.Parent = self.ParentFrame
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 0)
+	layout.Parent = self.Container
+end
+
+function FileTree:UpdateTree(treeData)
+	-- Clear existing nodes
+	for _, frame in pairs(self.NodeFrames) do
+		frame:Destroy()
+	end
+	self.NodeFrames = {}
+	self.Nodes = {}
+
+	-- Build new tree
+	if treeData then
+		for _, rootNode in ipairs(treeData) do
+			self:AddNodeInternal(nil, rootNode, 0)
+		end
+	end
+end
+
+function FileTree:AddNode(parentId, nodeData)
+	self:AddNodeInternal(parentId, nodeData, self:GetDepth(parentId) + 1)
+end
+
+function FileTree:AddNodeInternal(parentId, nodeData, depth)
+	local theme = Theme
+	local nodeId = nodeData.id or nodeData.Name
+
+	-- Store node data
+	self.Nodes[nodeId] = {
+		data = nodeData,
+		parentId = parentId,
+		depth = depth,
+		children = {},
+	}
+
+	if parentId and self.Nodes[parentId] then
+		table.insert(self.Nodes[parentId].children, nodeId)
+	end
+
+	-- Create visual node
+	local nodeFrame = Instance.new("Frame")
+	nodeFrame.Name = "Node_" .. nodeId
+	nodeFrame.Size = UDim2.new(1, 0, 0, theme.Sizes.RowHeight)
+	nodeFrame.BackgroundTransparency = 1
+	nodeFrame.BorderSizePixel = 0
+	nodeFrame.LayoutOrder = #self.NodeFrames
+	nodeFrame.Parent = self.Container
+
+	-- Hover effect
+	local hoverBg = Instance.new("Frame")
+	hoverBg.Name = "HoverBg"
+	hoverBg.Size = UDim2.new(1, 0, 1, 0)
+	hoverBg.BackgroundColor3 = theme.Colors.BackgroundLighter
+	hoverBg.BackgroundTransparency = 1
+	hoverBg.BorderSizePixel = 0
+	hoverBg.ZIndex = 0
+	hoverBg.Parent = nodeFrame
+
+	-- Indent based on depth
+	local indent = depth * theme.Sizes.TreeIndent
+
+	-- Expand/collapse button (for folders)
+	local hasChildren = nodeData.children and #nodeData.children > 0
+	local isFolder = nodeData.className == "Folder" or hasChildren
+
+	local expandBtn = nil
+	if isFolder then
+		expandBtn = Instance.new("TextButton")
+		expandBtn.Name = "ExpandBtn"
+		expandBtn.Size = UDim2.new(0, 16, 0, 16)
+		expandBtn.Position = UDim2.new(0, indent + 2, 0.5, -8)
+		expandBtn.BackgroundTransparency = 1
+		expandBtn.Text = self.ExpandedNodes[nodeId] and "▼" or "▶"
+		expandBtn.TextColor3 = theme.Colors.TextMuted
+		expandBtn.Font = theme.Fonts.Mono
+		expandBtn.TextSize = 10
+		expandBtn.Parent = nodeFrame
+
+		expandBtn.MouseButton1Click:Connect(function()
+			self:ToggleNode(nodeId)
+		end)
+	end
+
+	-- Icon
+	local icon = Instance.new("TextLabel")
+	icon.Name = "Icon"
+	icon.Size = UDim2.new(0, 18, 0, 18)
+	icon.Position = UDim2.new(0, indent + (isFolder and 18 or 2), 0.5, -9)
+	icon.BackgroundTransparency = 1
+	icon.Text = self:GetIcon(nodeData)
+	icon.TextColor3 = self:GetIconColor(nodeData)
+	icon.Font = theme.Fonts.Body
+	icon.TextSize = 14
+	icon.Parent = nodeFrame
+
+	-- Name label
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "Name"
+	nameLabel.Size = UDim2.new(1, -(indent + 40), 1, 0)
+	nameLabel.Position = UDim2.new(0, indent + (isFolder and 38 or 22), 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = nodeData.name or nodeData.Name or "Unknown"
+	nameLabel.TextColor3 = theme.Colors.Text
+	nameLabel.Font = theme.Fonts.Body
+	nameLabel.TextSize = theme.Sizes.Body
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	nameLabel.Parent = nodeFrame
+
+	-- Hover interactions
+	nodeFrame.MouseEnter:Connect(function()
+		hoverBg.BackgroundTransparency = 0
+	end)
+
+	nodeFrame.MouseLeave:Connect(function()
+		hoverBg.BackgroundTransparency = 1
+	end)
+
+	-- Click to select
+	nodeFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			self:SelectNode(nodeId)
+		end
+	end)
+
+	-- Store reference
+	self.NodeFrames[nodeId] = nodeFrame
+	self.Nodes[nodeId].frame = nodeFrame
+	self.Nodes[nodeId].expandBtn = expandBtn
+
+	-- Add children if expanded
+	if self.ExpandedNodes[nodeId] and nodeData.children then
+		for _, child in ipairs(nodeData.children) do
+			self:AddNodeInternal(nodeId, child, depth + 1)
+		end
+	end
+end
+
+function FileTree:RemoveNode(nodeId)
+	local node = self.Nodes[nodeId]
+	if not node then return end
+
+	-- Remove children first
+	for _, childId in ipairs(node.children) do
+		self:RemoveNode(childId)
+	end
+
+	-- Remove from parent's children list
+	if node.parentId and self.Nodes[node.parentId] then
+		local parentChildren = self.Nodes[node.parentId].children
+		for i, id in ipairs(parentChildren) do
+			if id == nodeId then
+				table.remove(parentChildren, i)
+				break
+			end
+		end
+	end
+
+	-- Destroy frame
+	if self.NodeFrames[nodeId] then
+		self.NodeFrames[nodeId]:Destroy()
+		self.NodeFrames[nodeId] = nil
+	end
+
+	self.Nodes[nodeId] = nil
+end
+
+function FileTree:ToggleNode(nodeId)
+	self.ExpandedNodes[nodeId] = not self.ExpandedNodes[nodeId]
+
+	-- Refresh tree display
+	local treeData = {}
+	for id, node in pairs(self.Nodes) do
+		if not node.parentId then
+			table.insert(treeData, node.data)
+		end
+	end
+	self:UpdateTree(treeData)
+end
+
+function FileTree:SelectNode(nodeId)
+	-- Deselect all
+	for id, node in pairs(self.Nodes) do
+		if node.frame then
+			local hoverBg = node.frame:FindFirstChild("HoverBg")
+			if hoverBg then
+				hoverBg.BackgroundColor3 = Theme.Colors.BackgroundLighter
+			end
+		end
+	end
+
+	-- Select this node
+	local node = self.Nodes[nodeId]
+	if node and node.frame then
+		local hoverBg = node.frame:FindFirstChild("HoverBg")
+		if hoverBg then
+			hoverBg.BackgroundColor3 = Theme.Colors.Accent
+			hoverBg.BackgroundTransparency = 0.8
+		end
+	end
+
+	print("[Rune] Selected: " .. (node.data.name or node.data.Name))
+end
+
+function FileTree:GetDepth(nodeId)
+	if not nodeId or not self.Nodes[nodeId] then
+		return 0
+	end
+	local depth = 0
+	local current = nodeId
+	while self.Nodes[current] and self.Nodes[current].parentId do
+		depth = depth + 1
+		current = self.Nodes[current].parentId
+	end
+	return depth
+end
+
+function FileTree:GetIcon(nodeData)
+	local className = nodeData.className or nodeData.ClassName or "Folder"
+
+	if className == "Folder" then
+		return "📁"
+	elseif className == "Script" then
+		return "⚡"
+	elseif className == "LocalScript" then
+		return "👤"
+	elseif className == "ModuleScript" then
+		return "📦"
+	elseif className == "Model" then
+		return "🧊"
+	elseif className == "Part" or className == "MeshPart" then
+		return "🟦"
+	else
+		return "📄"
+	end
+end
+
+function FileTree:GetIconColor(nodeData)
+	local className = nodeData.className or nodeData.ClassName or "Folder"
+
+	if className == "Folder" then
+		return Theme.Colors.Folder
+	elseif className == "Script" or className == "LocalScript" or className == "ModuleScript" then
+		return Theme.Colors.FileLua
+	elseif className == "Model" or className == "Part" or className == "MeshPart" then
+		return Theme.Colors.FileModel
+	else
+		return Theme.Colors.FileJson
+	end
+end
+
+return FileTree]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000028">
+        <Properties>
+          <string name="Name">MainWindow</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Main Window
+	Modern dockable panel with file tree, status bar, and connection controls
+]]
+
+local Theme = require(script.Parent.Parent.utils.Theme)
+local FileTree = require(script.Parent.FileTree)
+local StatusBar = require(script.Parent.StatusBar)
+
+local MainWindow = {}
+MainWindow.__index = MainWindow
+
+-- Events
+local Signal = {}
+Signal.__index = Signal
+
+function Signal.new()
+	local self = setmetatable({}, Signal)
+	self._connections = {}
+	return self
+end
+
+function Signal:Connect(callback)
+	table.insert(self._connections, callback)
+	return {
+		Disconnect = function()
+			for i, conn in ipairs(self._connections) do
+				if conn == callback then
+					table.remove(self._connections, i)
+					break
+				end
+			end
+		end
+	}
+end
+
+function Signal:Fire(...)
+	for _, callback in ipairs(self._connections) do
+		task.spawn(callback, ...)
+	end
+end
+
+function MainWindow.new(plugin)
+	local self = setmetatable({}, MainWindow)
+
+	self.Plugin = plugin
+	self.IsVisible = false
+	self.IsConnected = false
+
+	-- Events
+	self.OnConnectRequested = Signal.new()
+	self.OnDisconnectRequested = Signal.new()
+	self.OnSyncToggle = Signal.new()
+
+	-- Create widget
+	self.Widget = plugin:CreateDockWidgetPluginGui(
+		"RuneSyncPanel",
+		DockWidgetPluginGuiInfo.new(
+			Enum.InitialDockState.Right,
+			false,
+			false,
+			300,
+			500,
+			250,
+			300
+		)
+	)
+	self.Widget.Title = "Rune Sync"
+	self.Widget.Name = "RuneSyncPanel"
+
+	self:BuildUI()
+
+	-- Save state on close
+	self.Widget:GetPropertyChangedSignal("Enabled"):Connect(function()
+		self.IsVisible = self.Widget.Enabled
+		plugin:SetSetting("Rune_IsOpen", self.IsVisible)
+	end)
+
+	return self
+end
+
+function MainWindow:BuildUI()
+	local theme = Theme
+
+	-- Main container
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Name = "MainFrame"
+	mainFrame.Size = UDim2.new(1, 0, 1, 0)
+	mainFrame.BackgroundColor3 = theme.Colors.Background
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = self.Widget
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = theme.CornerRadius
+	corner.Parent = mainFrame
+
+	-- Header
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.Size = UDim2.new(1, 0, 0, 40)
+	header.BackgroundColor3 = theme.Colors.BackgroundLight
+	header.BorderSizePixel = 0
+	header.Parent = mainFrame
+
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = theme.CornerRadius
+	headerCorner.Parent = header
+
+	local headerText = Instance.new("TextLabel")
+	headerText.Name = "Title"
+	headerText.Size = UDim2.new(1, -10, 1, 0)
+	headerText.Position = UDim2.new(0, 10, 0, 0)
+	headerText.BackgroundTransparency = 1
+	headerText.Text = "Rune Sync"
+	headerText.TextColor3 = theme.Colors.Text
+	headerText.Font = theme.Fonts.Header
+	headerText.TextSize = theme.Sizes.Header
+	headerText.TextXAlignment = Enum.TextXAlignment.Left
+	headerText.Parent = header
+
+	-- Connection bar
+	local connBar = Instance.new("Frame")
+	connBar.Name = "ConnectionBar"
+	connBar.Size = UDim2.new(1, -20, 0, 36)
+	connBar.Position = UDim2.new(0, 10, 0, 48)
+	connBar.BackgroundColor3 = theme.Colors.BackgroundLighter
+	connBar.BorderSizePixel = 0
+	connBar.Parent = mainFrame
+
+	local connCorner = Instance.new("UICorner")
+	connCorner.CornerRadius = theme.CornerRadius
+	connCorner.Parent = connBar
+
+	-- Host input
+	self.HostInput = self:CreateInput(connBar, "Host", "localhost", UDim2.new(0, 5, 0, 4), UDim2.new(0.5, -8, 0, 28))
+
+	-- Port input
+	self.PortInput = self:CreateInput(connBar, "Port", "34872", UDim2.new(0.5, 3, 0, 4), UDim2.new(0.5, -8, 0, 28))
+
+	-- Connect button
+	self.ConnectButton = Instance.new("TextButton")
+	self.ConnectButton.Name = "ConnectButton"
+	self.ConnectButton.Size = UDim2.new(1, -10, 0, 32)
+	self.ConnectButton.Position = UDim2.new(0, 5, 0, 42)
+	self.ConnectButton.BackgroundColor3 = theme.Colors.Accent
+	self.ConnectButton.BorderSizePixel = 0
+	self.ConnectButton.Text = "Connect"
+	self.ConnectButton.TextColor3 = theme.Colors.Text
+	self.ConnectButton.Font = theme.Fonts.Body
+	self.ConnectButton.TextSize = theme.Sizes.Body
+	self.ConnectButton.AutoButtonColor = true
+	self.ConnectButton.Parent = connBar
+
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = theme.CornerRadius
+	btnCorner.Parent = self.ConnectButton
+
+	self.ConnectButton.MouseButton1Click:Connect(function()
+		if self.IsConnected then
+			self.OnDisconnectRequested:Fire()
+		else
+			local host = self.HostInput.Text
+			local port = tonumber(self.PortInput.Text) or 34872
+			self.OnConnectRequested:Fire(host, port)
+		end
+	end)
+
+	-- File tree section
+	local treeLabel = Instance.new("TextLabel")
+	treeLabel.Name = "TreeLabel"
+	treeLabel.Size = UDim2.new(1, -20, 0, 20)
+	treeLabel.Position = UDim2.new(0, 10, 0, 92)
+	treeLabel.BackgroundTransparency = 1
+	treeLabel.Text = "Synced Folders"
+	treeLabel.TextColor3 = theme.Colors.TextMuted
+	treeLabel.Font = theme.Fonts.Body
+	treeLabel.TextSize = theme.Sizes.Small
+	treeLabel.TextXAlignment = Enum.TextXAlignment.Left
+	treeLabel.Parent = mainFrame
+
+	-- File tree container
+	local treeFrame = Instance.new("Frame")
+	treeFrame.Name = "TreeFrame"
+	treeFrame.Size = UDim2.new(1, -20, 1, -140)
+	treeFrame.Position = UDim2.new(0, 10, 0, 114)
+	treeFrame.BackgroundColor3 = theme.Colors.BackgroundLight
+	treeFrame.BorderSizePixel = 0
+	treeFrame.ClipsDescendants = true
+	treeFrame.Parent = mainFrame
+
+	local treeCorner = Instance.new("UICorner")
+	treeCorner.CornerRadius = theme.CornerRadius
+	treeCorner.Parent = treeFrame
+
+	-- Scroll frame for tree
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Name = "ScrollFrame"
+	scrollFrame.Size = UDim2.new(1, 0, 1, 0)
+	scrollFrame.BackgroundTransparency = 1
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.ScrollBarThickness = 4
+	scrollFrame.ScrollBarImageColor3 = theme.Colors.Border
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scrollFrame.Parent = treeFrame
+
+	local scrollLayout = Instance.new("UIListLayout")
+	scrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	scrollLayout.Padding = UDim.new(0, 0)
+	scrollLayout.Parent = scrollFrame
+
+	-- Create file tree
+	self.FileTree = FileTree.new(scrollFrame)
+
+	-- Status bar
+	self.StatusBar = StatusBar.new(mainFrame)
+
+	-- Store references
+	self.MainFrame = mainFrame
+	self.TreeFrame = treeFrame
+end
+
+function MainWindow:CreateInput(parent, placeholder, default, position, size)
+	local theme = Theme
+
+	local container = Instance.new("Frame")
+	container.Name = placeholder .. "Container"
+	container.Size = size
+	container.Position = position
+	container.BackgroundColor3 = theme.Colors.Surface
+	container.BorderSizePixel = 0
+	container.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = theme.CornerRadius
+	corner.Parent = container
+
+	local input = Instance.new("TextBox")
+	input.Name = placeholder .. "Input"
+	input.Size = UDim2.new(1, -8, 1, 0)
+	input.Position = UDim2.new(0, 4, 0, 0)
+	input.BackgroundTransparency = 1
+	input.Text = default
+	input.PlaceholderText = placeholder
+	input.TextColor3 = theme.Colors.Text
+	input.PlaceholderColor3 = theme.Colors.TextDark
+	input.Font = theme.Fonts.Mono
+	input.TextSize = theme.Sizes.Small
+	input.ClearTextOnFocus = false
+	input.Parent = container
+
+	return input
+end
+
+function MainWindow:Show()
+	self.Widget.Enabled = true
+	self.IsVisible = true
+	self.Plugin:SetSetting("Rune_IsOpen", true)
+end
+
+function MainWindow:Hide()
+	self.Widget.Enabled = false
+	self.IsVisible = false
+	self.Plugin:SetSetting("Rune_IsOpen", false)
+end
+
+function MainWindow:SetStatus(text, color)
+	self.StatusBar:SetStatus(text, color)
+end
+
+function MainWindow:SetConnectionState(connected)
+	self.IsConnected = connected
+	if connected then
+		self.ConnectButton.Text = "Disconnect"
+		self.ConnectButton.BackgroundColor3 = Theme.Colors.Error
+	else
+		self.ConnectButton.Text = "Connect"
+		self.ConnectButton.BackgroundColor3 = Theme.Colors.Accent
+	end
+end
+
+function MainWindow:UpdateFileTree(treeData)
+	self.FileTree:UpdateTree(treeData)
+end
+
+function MainWindow:AddFileNode(parentId, nodeData)
+	self.FileTree:AddNode(parentId, nodeData)
+end
+
+function MainWindow:RemoveFileNode(nodeId)
+	self.FileTree:RemoveNode(nodeId)
+end
+
+function MainWindow:Destroy()
+	if self.Widget then
+		self.Widget:Destroy()
+	end
+end
+
+return MainWindow]]></ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX00000029">
+        <Properties>
+          <string name="Name">StatusBar</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Status Bar
+	Bottom status bar showing connection and sync state
+]]
+
+local Theme = require(script.Parent.Parent.utils.Theme)
+
+local StatusBar = {}
+StatusBar.__index = StatusBar
+
+function StatusBar.new(parentFrame)
+	local self = setmetatable({}, StatusBar)
+
+	self.ParentFrame = parentFrame
+	self:BuildUI()
+
+	return self
+end
+
+function StatusBar:BuildUI()
+	local theme = Theme
+
+	-- Status bar frame
+	self.Frame = Instance.new("Frame")
+	self.Frame.Name = "StatusBar"
+	self.Frame.Size = UDim2.new(1, -20, 0, 24)
+	self.Frame.Position = UDim2.new(0, 10, 1, -34)
+	self.Frame.BackgroundColor3 = theme.Colors.BackgroundLight
+	self.Frame.BorderSizePixel = 0
+	self.Frame.Parent = self.ParentFrame
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = theme.CornerRadius
+	corner.Parent = self.Frame
+
+	-- Status indicator dot
+	self.Indicator = Instance.new("Frame")
+	self.Indicator.Name = "Indicator"
+	self.Indicator.Size = UDim2.new(0, 8, 0, 8)
+	self.Indicator.Position = UDim2.new(0, 8, 0.5, -4)
+	self.Indicator.BackgroundColor3 = theme.Colors.TextMuted
+	self.Indicator.BorderSizePixel = 0
+	self.Indicator.Parent = self.Frame
+
+	local indicatorCorner = Instance.new("UICorner")
+	indicatorCorner.CornerRadius = UDim.new(1, 0)
+	indicatorCorner.Parent = self.Indicator
+
+	-- Status text
+	self.TextLabel = Instance.new("TextLabel")
+	self.TextLabel.Name = "StatusText"
+	self.TextLabel.Size = UDim2.new(1, -24, 1, 0)
+	self.TextLabel.Position = UDim2.new(0, 22, 0, 0)
+	self.TextLabel.BackgroundTransparency = 1
+	self.TextLabel.Text = "Ready"
+	self.TextLabel.TextColor3 = theme.Colors.TextMuted
+	self.TextLabel.Font = theme.Fonts.Body
+	self.TextLabel.TextSize = theme.Sizes.Small
+	self.TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+	self.TextLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	self.TextLabel.Parent = self.Frame
+end
+
+function StatusBar:SetStatus(text, color)
+	self.TextLabel.Text = text
+	if color then
+		self.Indicator.BackgroundColor3 = color
+		self.TextLabel.TextColor3 = color
+	else
+		self.Indicator.BackgroundColor3 = Theme.Colors.TextMuted
+		self.TextLabel.TextColor3 = Theme.Colors.TextMuted
+	end
+end
+
+return StatusBar]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000030">
+      <Properties>
+        <string name="Name">utils</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX00000031">
+        <Properties>
+          <string name="Name">Theme</string>
+          <ProtectedString name="Source"><![CDATA[--[[
+	Rune Studio Plugin - Theme
+	Modern dark theme inspired by VS Code
+]]
+
+local Theme = {}
+
+Theme.Colors = {
+	Background = Color3.fromRGB(30, 30, 30),
+	BackgroundLight = Color3.fromRGB(37, 37, 38),
+	BackgroundLighter = Color3.fromRGB(45, 45, 48),
+	Surface = Color3.fromRGB(51, 51, 51),
+	Border = Color3.fromRGB(65, 65, 65),
+	Accent = Color3.fromRGB(0, 122, 204),
+	AccentHover = Color3.fromRGB(0, 140, 230),
+	Success = Color3.fromRGB(75, 183, 75),
+	Warning = Color3.fromRGB(220, 180, 60),
+	Error = Color3.fromRGB(240, 80, 80),
+	Text = Color3.fromRGB(240, 240, 240),
+	TextMuted = Color3.fromRGB(150, 150, 150),
+	TextDark = Color3.fromRGB(100, 100, 100),
+	Folder = Color3.fromRGB(200, 180, 100),
+	FileLua = Color3.fromRGB(100, 180, 220),
+	FileModel = Color3.fromRGB(180, 140, 220),
+	FileJson = Color3.fromRGB(180, 180, 180),
+}
+
+Theme.Fonts = {
+	Header = Enum.Font.GothamBold,
+	Body = Enum.Font.Gotham,
+	Mono = Enum.Font.Code,
+}
+
+Theme.Sizes = {
+	Header = 18,
+	Body = 14,
+	Small = 12,
+	ButtonHeight = 32,
+	InputHeight = 28,
+	TreeIndent = 20,
+	RowHeight = 24,
+}
+
+Theme.CornerRadius = UDim.new(0, 4)
+
+return Theme]]></ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Folder" referent="RBX00000032">
+      <Properties>
+        <string name="Name">Workspace</string>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>

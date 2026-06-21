@@ -1,10 +1,11 @@
 /**
  * Rune - WebSocket Server
  * Handles bidirectional synchronization with Roblox Studio
+ * Supports both WebSocket and HTTP polling fallback
  */
 
 import { WebSocketServer, WebSocket } from "ws";
-import type { IncomingMessage } from "node:http";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import type { WSMessage, RobloxClassName } from "../types/index.js";
 import { logger } from "../utils/logger.js";
 import { generateRequestId, generateSessionId } from "../utils/id-generator.js";
@@ -16,10 +17,14 @@ import { RobloxInstanceModel } from "../models/roblox-instance.js";
  */
 export class SyncServer {
   private wss: WebSocketServer | null = null;
+  private httpServer: ReturnType<typeof createServer> | null = null;
   private clients: Map<string, WebSocket> = new Map();
   private instanceTree: InstanceTree;
   private port: number;
   private isRunning: boolean = false;
+
+  // Polling support: message queue for HTTP polling clients
+  private pollMessages: Map<string, WSMessage[]> = new Map();
 
   // Event callbacks
   private onClientConnect?: (clientId: string) => void;
@@ -114,17 +119,16 @@ export class SyncServer {
   }
 
   /**
-   * Starts the WebSocket server
+   * Starts the WebSocket server with HTTP fallback on separate port
    */
   public start(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        // Start WebSocket server on main port
         this.wss = new WebSocketServer({ port: this.port });
 
         this.wss.on("listening", () => {
-          logger.success(`Sync server started on port ${this.port}`);
-          this.isRunning = true;
-          resolve();
+          logger.success(`WebSocket server started on port ${this.port}`);
         });
 
         this.wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
@@ -132,18 +136,101 @@ export class SyncServer {
         });
 
         this.wss.on("error", (error: Error) => {
-          logger.error(`Sync server error: ${error.message}`);
+          logger.error(`WebSocket server error: ${error.message}`);
           reject(error);
         });
 
-        this.wss.on("close", () => {
-          logger.info("Sync server stopped");
-          this.isRunning = false;
+        // Start HTTP polling server on port+1
+        const httpPort = this.port + 1;
+        this.httpServer = createServer((req, res) => {
+          this.handleHttpRequest(req, res);
+        });
+
+        this.httpServer.listen(httpPort, () => {
+          logger.success(`HTTP polling server started on port ${httpPort}`);
+          this.isRunning = true;
+          resolve();
+        });
+
+        this.httpServer.on("error", (error: Error) => {
+          logger.error(`HTTP server error: ${error.message}`);
+          reject(error);
         });
       } catch (error) {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Handles HTTP requests (for polling fallback)
+   */
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    const url = req.url || "";
+    const clientId = this.extractClientId(req);
+
+    // Enable CORS for Roblox Studio
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    if (url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", version: "0.1.0-beta" }));
+      return;
+    }
+
+    if (url === "/poll") {
+      const messages = this.pollMessages.get(clientId) || [];
+      this.pollMessages.set(clientId, []); // Clear after sending
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(messages));
+      return;
+    }
+
+    if (url === "/send" && req.method === "POST") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk.toString();
+      });
+      req.on("end", () => {
+        try {
+          const message = JSON.parse(body);
+          this.handleMessage(clientId, Buffer.from(JSON.stringify(message)));
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: true }));
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid JSON" }));
+        }
+      });
+      return;
+    }
+
+    // Default: 404
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  }
+
+  /**
+   * Extracts client ID from request headers or query
+   */
+  private extractClientId(req: IncomingMessage): string {
+    const headerId = req.headers["x-rune-client-id"];
+    if (headerId) return headerId as string;
+
+    // Try to extract from query string
+    const url = req.url || "";
+    const match = url.match(/[?&]clientId=([^&]+)/);
+    if (match) return match[1];
+
+    return "polling-" + generateSessionId();
   }
 
   /**
@@ -160,6 +247,12 @@ export class SyncServer {
 
         this.wss.close(() => {
           this.wss = null;
+        });
+      }
+
+      if (this.httpServer) {
+        this.httpServer.close(() => {
+          this.httpServer = null;
           this.isRunning = false;
           logger.info("Sync server stopped");
           resolve();
@@ -200,334 +293,257 @@ export class SyncServer {
     });
 
     ws.on("error", (error: Error) => {
-      logger.error(`Client error (${clientId}): ${error.message}`);
-    });
-
-    // Handle ping/pong for connection health
-    ws.on("pong", () => {
-      // Connection is alive
+      logger.error(`WebSocket error for ${clientId}: ${error.message}`);
+      this.clients.delete(clientId);
     });
   }
 
   /**
-   * Handles incoming WebSocket messages
+   * Handles incoming messages from clients
    */
   private handleMessage(clientId: string, data: Buffer): void {
     try {
       const message = JSON.parse(data.toString()) as WSMessage;
-      logger.debug(`Received message: ${message.type} from ${clientId}`);
 
       switch (message.type) {
-        case "sync_request":
-          this.handleSyncRequest(clientId, message);
+        case "request_hierarchy":
+          this.sendHierarchy(clientId);
           break;
+
         case "instance_create":
-          this.handleInstanceCreate(clientId, message);
+          this.handleInstanceCreate(message);
           break;
+
         case "instance_update":
-          this.handleInstanceUpdate(clientId, message);
+          this.handleInstanceUpdate(message);
           break;
+
         case "instance_delete":
-          this.handleInstanceDelete(clientId, message);
+          this.handleInstanceDelete(message);
           break;
+
         case "instance_move":
-          this.handleInstanceMove(clientId, message);
+          this.handleInstanceMove(message);
           break;
-        case "property_update":
-          this.handlePropertyUpdate(clientId, message);
-          break;
+
         case "script_update":
-          this.handleScriptUpdate(clientId, message);
+          this.handleScriptUpdate(message);
           break;
-        case "hierarchy_request":
-          this.handleHierarchyRequest(clientId, message);
+
+        case "property_update":
+          this.handlePropertyUpdate(message);
           break;
+
         case "ping":
-          this.sendToClient(clientId, { type: "pong", payload: {} });
+          this.sendToClient(clientId, {
+            type: "pong",
+            requestId: message.requestId,
+          });
           break;
+
         default:
-          logger.warn(`Unknown message type: ${message.type} from ${clientId}`);
+          logger.warn(`Unknown message type: ${message.type}`);
       }
     } catch (error) {
       logger.error(`Failed to parse message from ${clientId}: ${error}`);
-      this.sendToClient(clientId, {
-        type: "error",
-        payload: { message: "Invalid message format" },
-      });
     }
   }
 
   /**
-   * Handles sync request from Studio
+   * Sends the current instance hierarchy to a client
    */
-  private handleSyncRequest(clientId: string, message: WSMessage): void {
-    const payload = message.payload as { projectId?: string; placeId?: string };
-    logger.info(`Sync requested: ${payload?.projectId || "unknown"}`);
-
-    const syncResponse: WSMessage = {
-      type: "sync_response",
-      payload: {
-        success: true,
-        message: "Sync established",
-        instances: this.instanceTree
-          .getAllInstances()
-          .map((i) => i.serialize()),
-      },
-    };
-    if (message.id) {
-      syncResponse.id = message.id;
-    }
-    this.sendToClient(clientId, syncResponse);
+  private sendHierarchy(clientId: string): void {
+    const hierarchy = this.instanceTree.getHierarchy();
+    this.sendToClient(clientId, {
+      type: "hierarchy",
+      requestId: generateRequestId(),
+      data: hierarchy,
+    });
   }
 
   /**
    * Handles instance creation from Studio
    */
-  private handleInstanceCreate(clientId: string, message: WSMessage): void {
-    const payload = message.payload as { instance: Record<string, unknown> };
-    const instance = RobloxInstanceModel.deserialize(payload.instance);
+  private handleInstanceCreate(message: WSMessage): void {
+    if (!message.data) return;
 
+    const instance = message.data as RobloxInstanceModel;
     this.instanceTree.addInstance(instance);
-    logger.info(`Instance created: ${instance.name} (${instance.className})`);
 
     if (this.onInstanceCreate) {
       this.onInstanceCreate(instance);
     }
 
-    // Broadcast to other clients
-    this.broadcast(
-      {
-        type: "instance_create",
-        payload: { instance: instance.serialize() },
-      },
-      clientId,
-    );
+    logger.info(`Instance created: ${instance.name} (${instance.className})`);
   }
 
   /**
    * Handles instance update from Studio
    */
-  private handleInstanceUpdate(clientId: string, message: WSMessage): void {
-    const payload = message.payload as {
-      instanceId: string;
-      changes: Record<string, unknown>;
-    };
+  private handleInstanceUpdate(message: WSMessage): void {
+    if (!message.data) return;
 
-    const instance = this.instanceTree.getInstance(payload.instanceId);
-    if (instance) {
-      // Apply changes
-      if (payload.changes.name) {
-        instance.name = payload.changes.name as string;
-      }
-      if (payload.changes.className) {
-        instance.className = payload.changes.className as RobloxClassName;
-      }
+    const instance = message.data as RobloxInstanceModel;
+    this.instanceTree.updateInstance(instance);
 
-      logger.info(`Instance updated: ${instance.name}`);
-
-      if (this.onInstanceUpdate) {
-        this.onInstanceUpdate(instance);
-      }
-
-      // Broadcast to other clients
-      this.broadcast(
-        {
-          type: "instance_update",
-          payload: { instanceId: instance.id, changes: payload.changes },
-        },
-        clientId,
-      );
+    if (this.onInstanceUpdate) {
+      this.onInstanceUpdate(instance);
     }
+
+    logger.info(`Instance updated: ${instance.name}`);
   }
 
   /**
    * Handles instance deletion from Studio
    */
-  private handleInstanceDelete(clientId: string, message: WSMessage): void {
-    const payload = message.payload as { instanceId: string };
+  private handleInstanceDelete(message: WSMessage): void {
+    if (!message.data?.id) return;
 
-    this.instanceTree.removeInstance(payload.instanceId);
-    logger.info(`Instance deleted: ${payload.instanceId}`);
+    const instanceId = message.data.id as string;
+    this.instanceTree.removeInstance(instanceId);
 
     if (this.onInstanceDelete) {
-      this.onInstanceDelete(payload.instanceId);
+      this.onInstanceDelete(instanceId);
     }
 
-    // Broadcast to other clients
-    this.broadcast(
-      {
-        type: "instance_delete",
-        payload: { instanceId: payload.instanceId },
-      },
-      clientId,
-    );
+    logger.info(`Instance deleted: ${instanceId}`);
   }
 
   /**
    * Handles instance move from Studio
    */
-  private handleInstanceMove(clientId: string, message: WSMessage): void {
-    const payload = message.payload as {
-      instanceId: string;
+  private handleInstanceMove(message: WSMessage): void {
+    if (!message.data?.id) return;
+
+    const { id, newParentId } = message.data as {
+      id: string;
       newParentId: string | null;
     };
-
-    this.instanceTree.moveInstance(payload.instanceId, payload.newParentId);
-    logger.info(`Instance moved: ${payload.instanceId}`);
+    this.instanceTree.moveInstance(id, newParentId);
 
     if (this.onInstanceMove) {
-      this.onInstanceMove(payload.instanceId, payload.newParentId);
+      this.onInstanceMove(id, newParentId);
     }
 
-    // Broadcast to other clients
-    this.broadcast(
-      {
-        type: "instance_move",
-        payload: {
-          instanceId: payload.instanceId,
-          newParentId: payload.newParentId,
-        },
-      },
-      clientId,
-    );
+    logger.info(`Instance moved: ${id} -> ${newParentId || "root"}`);
+  }
+
+  /**
+   * Handles script source update from Studio
+   */
+  private handleScriptUpdate(message: WSMessage): void {
+    if (!message.data?.id || !message.data?.source) return;
+
+    const { id, source } = message.data as { id: string; source: string };
+    this.instanceTree.updateScriptSource(id, source);
+
+    if (this.onScriptUpdate) {
+      this.onScriptUpdate(id, source);
+    }
+
+    logger.info(`Script updated: ${id}`);
   }
 
   /**
    * Handles property update from Studio
    */
-  private handlePropertyUpdate(clientId: string, message: WSMessage): void {
-    const payload = message.payload as {
-      instanceId: string;
-      propertyName: string;
+  private handlePropertyUpdate(message: WSMessage): void {
+    if (!message.data?.id || !message.data?.property) return;
+
+    const { id, property, value } = message.data as {
+      id: string;
+      property: string;
       value: unknown;
     };
+    this.instanceTree.updateProperty(id, property, value);
 
-    const instance = this.instanceTree.getInstance(payload.instanceId);
-    if (instance) {
-      instance.setProperty(
-        payload.propertyName,
-        typeof payload.value === "string" ? "string" : typeof payload.value,
-        payload.value,
-      );
-
-      logger.info(
-        `Property updated: ${payload.propertyName} on ${instance.name}`,
-      );
-
-      if (this.onPropertyUpdate) {
-        this.onPropertyUpdate(
-          payload.instanceId,
-          payload.propertyName,
-          payload.value,
-        );
-      }
-
-      // Broadcast to other clients
-      this.broadcast(
-        {
-          type: "property_update",
-          payload: {
-            instanceId: payload.instanceId,
-            propertyName: payload.propertyName,
-            value: payload.value,
-          },
-        },
-        clientId,
-      );
+    if (this.onPropertyUpdate) {
+      this.onPropertyUpdate(id, property, value);
     }
-  }
 
-  /**
-   * Handles script update from Studio
-   */
-  private handleScriptUpdate(clientId: string, message: WSMessage): void {
-    const payload = message.payload as { instanceId: string; source: string };
-
-    const instance = this.instanceTree.getInstance(payload.instanceId);
-    if (instance) {
-      instance.setSource(payload.source);
-
-      logger.info(`Script updated: ${instance.name}`);
-
-      if (this.onScriptUpdate) {
-        this.onScriptUpdate(payload.instanceId, payload.source);
-      }
-
-      // Broadcast to other clients
-      this.broadcast(
-        {
-          type: "script_update",
-          payload: { instanceId: payload.instanceId, source: payload.source },
-        },
-        clientId,
-      );
-    }
-  }
-
-  /**
-   * Handles hierarchy request from Studio
-   */
-  private handleHierarchyRequest(clientId: string, message: WSMessage): void {
-    this.sendHierarchy(clientId, message.id);
-  }
-
-  /**
-   * Sends the current hierarchy to a client
-   */
-  private sendHierarchy(clientId: string, requestId?: string): void {
-    const instances = this.instanceTree
-      .getAllInstances()
-      .map((i) => i.serialize());
-
-    const message: WSMessage = {
-      type: "hierarchy_response",
-      payload: { instances },
-    };
-    if (requestId) {
-      message.id = requestId;
-    }
-    this.sendToClient(clientId, message);
+    logger.info(`Property updated: ${id}.${property}`);
   }
 
   /**
    * Sends a message to a specific client
    */
-  private sendToClient(clientId: string, message: WSMessage): void {
+  public sendToClient(clientId: string, message: WSMessage): boolean {
     const ws = this.clients.get(clientId);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(message));
+      return true;
     }
+
+    // Fallback: queue for polling clients
+    const queued = this.pollMessages.get(clientId) || [];
+    queued.push(message);
+    this.pollMessages.set(clientId, queued);
+    return true;
   }
 
   /**
-   * Broadcasts a message to all clients except the sender
+   * Broadcasts a message to all connected clients
    */
-  private broadcast(message: WSMessage, excludeClientId?: string): void {
+  public broadcast(message: WSMessage): void {
     const messageStr = JSON.stringify(message);
-    for (const [clientId, ws] of this.clients) {
-      if (clientId !== excludeClientId && ws.readyState === WebSocket.OPEN) {
-        ws.send(messageStr);
-      }
-    }
-  }
-
-  /**
-   * Sends a message to all clients (including sender)
-   */
-  public broadcastToAll(message: WSMessage): void {
-    const messageStr = JSON.stringify(message);
-    for (const ws of this.clients.values()) {
+    for (const [clientId, ws] of this.clients.entries()) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(messageStr);
+      } else {
+        // Queue for polling
+        const queued = this.pollMessages.get(clientId) || [];
+        queued.push(message);
+        this.pollMessages.set(clientId, queued);
       }
     }
   }
 
   /**
-   * Gets the number of connected clients
+   * Sends a sync update for a specific instance
    */
-  public getClientCount(): number {
-    return this.clients.size;
+  public sendSyncUpdate(instance: RobloxInstanceModel): void {
+    this.broadcast({
+      type: "sync_update",
+      requestId: generateRequestId(),
+      data: instance,
+    });
+  }
+
+  /**
+   * Sends a sync delete notification
+   */
+  public sendSyncDelete(instanceId: string): void {
+    this.broadcast({
+      type: "sync_delete",
+      requestId: generateRequestId(),
+      data: { id: instanceId },
+    });
+  }
+
+  /**
+   * Sends a sync move notification
+   */
+  public sendSyncMove(instanceId: string, newParentId: string | null): void {
+    this.broadcast({
+      type: "sync_move",
+      requestId: generateRequestId(),
+      data: { id: instanceId, newParentId },
+    });
+  }
+
+  /**
+   * Sends a property update notification
+   */
+  public sendPropertyUpdate(
+    instanceId: string,
+    propertyName: string,
+    value: unknown,
+  ): void {
+    this.broadcast({
+      type: "property_update",
+      requestId: generateRequestId(),
+      data: { id: instanceId, property: propertyName, value },
+    });
   }
 
   /**
@@ -538,9 +554,9 @@ export class SyncServer {
   }
 
   /**
-   * Gets the instance tree
+   * Gets the number of connected clients
    */
-  public getInstanceTree(): InstanceTree {
-    return this.instanceTree;
+  public getClientCount(): number {
+    return this.clients.size;
   }
 }

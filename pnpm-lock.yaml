@@ -203,6 +203,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  rune: 'link:'
+
 importers:
 
   .:
@@ -225,6 +228,9 @@ importers:
       prompts:
         specifier: ^2.4.2
         version: 2.4.2
+      rune:
+        specifier: 'link:'
+        version: 'link:'
       ws:
         specifier: ^8.21.0
         version: 8.21.0

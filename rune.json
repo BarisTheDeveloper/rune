@@ -1,0 +1,24 @@
+{
+  "name": "MyRuneProject",
+  "syncPort": 34872,
+  "folders": {
+    "Workspace": "src/Workspace",
+    "Players": "src/Players",
+    "Lighting": "src/Lighting",
+    "MaterialService": "src/MaterialService",
+    "ReplicatedFirst": "src/ReplicatedFirst",
+    "ReplicatedStorage": "src/ReplicatedStorage",
+    "ServerScriptService": "src/ServerScriptService",
+    "ServerStorage": "src/ServerStorage",
+    "StarterGui": "src/StarterGui",
+    "StarterPack": "src/StarterPack",
+    "StarterPlayer": "src/StarterPlayer",
+    "SoundService": "src/SoundService",
+    "Teams": "src/Teams",
+    "TextChatService": "src/TextChatService",
+    "Chat": "src/Chat",
+    "LocalizationService": "src/LocalizationService",
+    "StarterCharacterScripts": "src/StarterPlayer/StarterCharacterScripts",
+    "StarterPlayerScripts": "src/StarterPlayer/StarterPlayerScripts"
+  }
+}
