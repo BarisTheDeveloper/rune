@@ -166,13 +166,15 @@ export class SyncServer {
    * Handles HTTP requests (for polling fallback)
    */
   private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
-    const url = req.url || "";
+    const rawUrl = req.url || "";
+    // Strip query string for route matching
+    const url = rawUrl.split("?")[0] || "/";
     const clientId = this.extractClientId(req);
 
     // Enable CORS for Roblox Studio
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-rune-client-id");
 
     if (req.method === "OPTIONS") {
       res.writeHead(200);
@@ -228,7 +230,7 @@ export class SyncServer {
     // Try to extract from query string
     const url = req.url || "";
     const match = url.match(/[?&]clientId=([^&]+)/);
-    if (match) return match[1];
+    if (match && match[1]) return match[1];
 
     return "polling-" + generateSessionId();
   }
@@ -240,7 +242,7 @@ export class SyncServer {
     return new Promise((resolve) => {
       if (this.wss) {
         // Close all client connections
-        for (const ws of this.clients.values()) {
+        for (const ws of Array.from(this.clients.values())) {
           ws.close();
         }
         this.clients.clear();
@@ -306,38 +308,40 @@ export class SyncServer {
       const message = JSON.parse(data.toString()) as WSMessage;
 
       switch (message.type) {
-        case "request_hierarchy":
+        case "request_sync":
           this.sendHierarchy(clientId);
           break;
 
-        case "instance_create":
+        case "studio_instance_created":
           this.handleInstanceCreate(message);
           break;
 
-        case "instance_update":
+        case "studio_instance_updated":
           this.handleInstanceUpdate(message);
           break;
 
-        case "instance_delete":
+        case "studio_instance_deleted":
           this.handleInstanceDelete(message);
           break;
 
-        case "instance_move":
+        case "studio_instance_moved":
           this.handleInstanceMove(message);
           break;
 
-        case "script_update":
+        case "studio_script_updated":
           this.handleScriptUpdate(message);
           break;
 
-        case "property_update":
+        case "studio_property_changed":
           this.handlePropertyUpdate(message);
           break;
 
         case "ping":
           this.sendToClient(clientId, {
             type: "pong",
-            requestId: message.requestId,
+            ...(message.requestId
+              ? { requestId: message.requestId }
+              : {}),
           });
           break;
 
@@ -353,11 +357,16 @@ export class SyncServer {
    * Sends the current instance hierarchy to a client
    */
   private sendHierarchy(clientId: string): void {
-    const hierarchy = this.instanceTree.getHierarchy();
+    const allInstances = this.instanceTree.getAllInstances();
+    const instances = allInstances.map((inst) => inst.serialize());
     this.sendToClient(clientId, {
-      type: "hierarchy",
+      type: "full_sync",
       requestId: generateRequestId(),
-      data: hierarchy,
+      data: {
+        instances,
+        count: instances.length,
+        rootIds: this.instanceTree.getRootInstances().map((i) => i.id),
+      },
     });
   }
 
@@ -367,14 +376,15 @@ export class SyncServer {
   private handleInstanceCreate(message: WSMessage): void {
     if (!message.data) return;
 
-    const instance = message.data as RobloxInstanceModel;
+    const raw = message.data as Record<string, unknown>;
+    const instance = RobloxInstanceModel.deserialize(raw);
     this.instanceTree.addInstance(instance);
 
     if (this.onInstanceCreate) {
       this.onInstanceCreate(instance);
     }
 
-    logger.info(`Instance created: ${instance.name} (${instance.className})`);
+    logger.info(`Studio created: ${instance.name} (${instance.className})`);
   }
 
   /**
@@ -383,23 +393,25 @@ export class SyncServer {
   private handleInstanceUpdate(message: WSMessage): void {
     if (!message.data) return;
 
-    const instance = message.data as RobloxInstanceModel;
+    const raw = message.data as Record<string, unknown>;
+    const instance = RobloxInstanceModel.deserialize(raw);
     this.instanceTree.updateInstance(instance);
 
     if (this.onInstanceUpdate) {
       this.onInstanceUpdate(instance);
     }
 
-    logger.info(`Instance updated: ${instance.name}`);
+    logger.info(`Studio updated: ${instance.name}`);
   }
 
   /**
    * Handles instance deletion from Studio
    */
   private handleInstanceDelete(message: WSMessage): void {
-    if (!message.data?.id) return;
+    const data = message.data as Record<string, unknown> | undefined;
+    if (!data?.id) return;
 
-    const instanceId = message.data.id as string;
+    const instanceId = data.id as string;
     this.instanceTree.removeInstance(instanceId);
 
     if (this.onInstanceDelete) {
@@ -413,9 +425,10 @@ export class SyncServer {
    * Handles instance move from Studio
    */
   private handleInstanceMove(message: WSMessage): void {
-    if (!message.data?.id) return;
+    const data = message.data as Record<string, unknown> | undefined;
+    if (!data?.id) return;
 
-    const { id, newParentId } = message.data as {
+    const { id, newParentId } = data as {
       id: string;
       newParentId: string | null;
     };
@@ -432,9 +445,10 @@ export class SyncServer {
    * Handles script source update from Studio
    */
   private handleScriptUpdate(message: WSMessage): void {
-    if (!message.data?.id || !message.data?.source) return;
+    const data = message.data as Record<string, unknown> | undefined;
+    if (!data?.id || !data?.source) return;
 
-    const { id, source } = message.data as { id: string; source: string };
+    const { id, source } = data as { id: string; source: string };
     this.instanceTree.updateScriptSource(id, source);
 
     if (this.onScriptUpdate) {
@@ -448,9 +462,10 @@ export class SyncServer {
    * Handles property update from Studio
    */
   private handlePropertyUpdate(message: WSMessage): void {
-    if (!message.data?.id || !message.data?.property) return;
+    const data = message.data as Record<string, unknown> | undefined;
+    if (!data?.id || !data?.property) return;
 
-    const { id, property, value } = message.data as {
+    const { id, property, value } = data as {
       id: string;
       property: string;
       value: unknown;
@@ -486,7 +501,7 @@ export class SyncServer {
    */
   public broadcast(message: WSMessage): void {
     const messageStr = JSON.stringify(message);
-    for (const [clientId, ws] of this.clients.entries()) {
+    for (const [clientId, ws] of Array.from(this.clients.entries())) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(messageStr);
       } else {

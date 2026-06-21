@@ -140,6 +140,7 @@ export interface WSMessage {
   payload?: unknown;
   error?: string;
   timestamp?: number;
+  requestId?: string;
 }
 
 // File change event

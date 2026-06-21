@@ -18,13 +18,14 @@ Rune allows Roblox developers to work entirely inside **VS Code** while keeping 
 ## Features
 
 - **Real-time File Watching** - Powered by Chokidar for instant change detection
-- **WebSocket Synchronization** - Low-latency bidirectional sync with Roblox Studio
+- **WebSocket + HTTP Polling** - Dual transport sync with automatic fallback
 - **Script Type Detection** - Automatically determines Roblox script types from filenames
+- **Built-in RBXMX Builder** - No Rojo dependency needed for plugin/model building
 - **Model Support** - Handles `.rbxm` and `.rbxmx` model files
 - **Instance Definitions** - JSON-based object definition files for non-script instances
 - **Roblox Place Building** - Generate `.rbxlx` files from your project
 - **Package Management** - Install Roblox modules, plugins, and dependencies
-- **Modern Studio Plugin** - VS Code-inspired UI for Roblox Studio
+- **Modern Studio Plugin** - VS Code-inspired dark UI for Roblox Studio
 
 ## Tech Stack
 
@@ -43,6 +44,25 @@ Rune allows Roblox developers to work entirely inside **VS Code** while keeping 
 - **Node.js** 18+ (LTS recommended)
 - **pnpm** 11+ (required package manager)
 
+## Quick Start
+
+```bash
+# Clone and install
+git clone https://github.com/BarisTheDeveloper/rune.git
+cd rune
+pnpm install
+
+# Build the CLI
+npx tsc
+
+# Create a new project
+node dist/rune.js init --name MyGame
+
+# Or link globally (optional)
+pnpm link --global .
+rune init --name MyGame
+```
+
 ## Installation
 
 ```bash
@@ -56,12 +76,39 @@ pnpm install
 # Build the project
 npx tsc
 
-# Or on Windows PowerShell:
-./node_modules/.bin/tsc.cmd
-
 # Link for global usage (optional)
 pnpm link --global .
 ```
+
+## Rune Studio Plugin
+
+The Rune Studio Plugin provides a modern dark UI for managing synchronization within Roblox Studio.
+
+### Install Plugin
+
+```bash
+# Build CLI first, then install the plugin
+npx tsc
+node install-plugin.mjs
+```
+
+This builds `RunePlugin.rbxmx` and copies it to `%LOCALAPPDATA%\Roblox\Plugins\`.
+
+**Then in Roblox Studio:**
+1. Restart Roblox Studio (or open it)
+2. Go to **Plugins** tab → click **Rune Sync** button
+3. The Rune panel opens on the right side
+4. Enter host (`localhost`) and port (`34872`), click **Connect**
+
+### Plugin Features
+
+- **Modern Dark UI** - VS Code-inspired interface with rounded corners
+- **File Tree Visualization** - Browse synced folders with emoji icons
+- **WebSocket Connection** - Real-time sync with Rune CLI
+- **HTTP Polling Fallback** - Automatic if WebSocket API unavailable
+- **Bidirectional Sync** - Changes in Studio reflect on filesystem
+- **Auto-Reconnect** - Exponential backoff reconnection
+- **Status Indicators** - Visual connection and sync state
 
 ## CLI Commands
 
@@ -73,6 +120,8 @@ Creates a new Rune project with the default Roblox folder structure.
 rune init
 # or
 rune init --name MyGame
+# or
+rune init --type plugin
 ```
 
 Generates:
@@ -130,7 +179,8 @@ rune sync --port 34872
 
 Responsibilities:
 
-- Launches WebSocket server
+- Launches WebSocket server (port 34872)
+- Launches HTTP polling server (port 34873) for fallback
 - Accepts Studio connections
 - Synchronizes Explorer hierarchy
 - Synchronizes instances, properties, and scripts
@@ -163,7 +213,7 @@ rune build --upload  # Roblox Open Cloud publishing
 Installs Roblox packages, modules, or the Rune Studio plugin.
 
 ```bash
-# Install the Rune Studio Plugin locally
+# Install the Rune Studio Plugin
 rune install rune-plugin
 
 # Install globally (Roblox Plugins folder)
@@ -260,66 +310,56 @@ Create JSON files to define non-script instances:
 }
 ```
 
-## Rune Studio Plugin
-
-The Rune Studio Plugin provides a modern UI for managing synchronization within Roblox Studio.
-
-### Installation
-
-```bash
-# Install via CLI
-rune install -g rune-plugin
-
-# Or build manually with Rojo
-rojo build plugin/default.project.json -o RunePlugin.rbxm
-```
-
-### Features
-
-- **Modern Dark UI** - VS Code-inspired interface
-- **File Tree Visualization** - Browse synced folders with icons
-- **WebSocket Connection** - Real-time sync with Rune CLI
-- **Bidirectional Sync** - Changes in Studio reflect on filesystem
-- **Auto-Reconnect** - Automatic reconnection with exponential backoff
-- **Status Indicators** - Visual connection and sync state
-
 ## Architecture
 
 ```
 src/
-├── cli/           # CLI entry point
-├── commands/      # Command implementations
+├── rune.ts           # CLI entry point
+├── commands/         # Command implementations
 │   ├── init.ts
 │   ├── watch.ts
 │   ├── sync.ts
 │   ├── build.ts
 │   └── install.ts
-├── sync/          # Synchronization engine
-├── studio/        # Studio communication
-├── filesystem/    # File watching
-├── config/        # Configuration management
-├── build/         # Place file generation
-├── models/        # Data models
+├── websocket/        # WebSocket server + HTTP polling
+├── filesystem/       # File watching (Chokidar)
+├── config/           # Configuration management
+├── models/           # Data models
 │   ├── instance-tree.ts
 │   └── roblox-instance.ts
-├── websocket/     # WebSocket server
-├── utils/         # Utilities
-└── types/         # TypeScript definitions
+├── utils/            # Utilities (RBXMX builder, logger, etc.)
+└── types/            # TypeScript definitions
 
 plugin/
 ├── src/
-│   ├── main.server.lua
+│   ├── main.server.lua          # Plugin entry point
 │   ├── ui/
-│   │   ├── MainWindow.lua
-│   │   ├── FileTree.lua
-│   │   └── StatusBar.lua
+│   │   ├── MainWindow.lua       # Dockable panel UI
+│   │   ├── FileTree.lua         # Synced folder tree
+│   │   └── StatusBar.lua        # Connection status
 │   ├── sync/
-│   │   ├── WebSocketClient.lua
-│   │   └── InstanceSync.lua
+│   │   ├── WebSocketClient.lua  # WS + HTTP polling client
+│   │   └── InstanceSync.lua     # Bidirectional sync logic
 │   └── utils/
-│       └── Theme.lua
-└── default.project.json
+│       └── Theme.lua            # VS Code dark theme
+└── install-plugin.mjs           # Plugin build + install script
 ```
+
+## Protocol
+
+Rune uses a JSON message protocol over WebSocket (with HTTP polling fallback):
+
+| Direction      | Message Type              | Purpose                     |
+| -------------- | ------------------------- | --------------------------- |
+| Studio → CLI   | `request_sync`            | Request full hierarchy      |
+| CLI → Studio   | `full_sync`               | Full instance tree          |
+| CLI → Studio   | `instance_created`        | New file detected           |
+| CLI → Studio   | `instance_updated`        | File changed                |
+| CLI → Studio   | `instance_deleted`        | File removed                |
+| Studio → CLI   | `studio_instance_created` | New instance in Studio      |
+| Studio → CLI   | `studio_instance_deleted` | Instance removed in Studio  |
+| Studio → CLI   | `studio_script_updated`   | Script source changed       |
+| Studio → CLI   | `studio_property_changed` | Property value changed      |
 
 ## Future Roadmap
 
@@ -331,7 +371,7 @@ plugin/
 - [ ] Package management enhancements
 - [ ] Team synchronization
 - [ ] Live collaboration
-- [ ] Studio plugin auto-installation
+- [ ] TypeScript → Luau compilation
 
 ## Contributing
 

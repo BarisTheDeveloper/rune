@@ -1,6 +1,6 @@
 --[[
-	Rune Studio Plugin - Instance Sync
-	Handles bidirectional synchronization between filesystem and Roblox Studio
+	Rune Studio Plugin - Instance Sync with Undo Support
+	Handles bidirectional synchronization + change history for rollback
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -9,7 +9,8 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local InstanceSync = {}
 InstanceSync.__index = InstanceSync
 
--- Roblox service mapping
+local MAX_UNDO = 20
+
 local SERVICE_MAP = {
 	Workspace = game.Workspace,
 	Players = game.Players,
@@ -35,10 +36,11 @@ function InstanceSync.new(webSocketClient, mainWindow)
 	self.WebSocket = webSocketClient
 	self.MainWindow = mainWindow
 	self.Enabled = true
-	self.InstanceMap = {} -- Maps Rune IDs to Roblox instances
+	self.InstanceMap = {}
 	self.PendingChanges = {}
+	self.UndoStack = {}
+	self.InstanceCount = 0
 
-	-- Listen for Studio changes
 	self:SetupStudioListeners()
 
 	return self
@@ -50,7 +52,7 @@ end
 
 function InstanceSync:RequestSync()
 	if not self.Enabled then return end
-
+	self.MainWindow:LogActivity("info", "Requesting full sync...")
 	self.WebSocket:Send({
 		type = "request_sync",
 		timestamp = os.time(),
@@ -79,78 +81,166 @@ function InstanceSync:HandleMessage(message)
 	elseif msgType == "script_source" then
 		self:HandleScriptSource(message.data)
 	elseif msgType == "sync_complete" then
+		local count = message.data and message.data.count or 0
 		self.MainWindow:SetStatus("Sync complete", nil)
+		self.MainWindow:SetInstanceCount(count)
+		self.MainWindow:LogActivity("success", "Sync complete — " .. count .. " instances")
 	elseif msgType == "error" then
 		warn("[Rune] Server error: " .. tostring(message.error))
+		self.MainWindow:LogActivity("error", "Server: " .. tostring(message.error))
 	end
 end
 
 function InstanceSync:HandleFullSync(data)
-	self.MainWindow:SetStatus("Receiving sync data...", nil)
+	self.MainWindow:LogActivity("sync", "Receiving full sync...")
+	self.MainWindow:SetStatus("Syncing...", nil)
 
-	-- Clear existing synced instances
 	self.InstanceMap = {}
 
-	-- Build tree from root nodes
 	if data.instances then
+		-- Sort: root instances (parentId=nil) first, then children
+		table.sort(data.instances, function(a, b)
+			local aIsRoot = (a.parentId == nil)
+			local bIsRoot = (b.parentId == nil)
+			if aIsRoot and not bIsRoot then return true end
+			if not aIsRoot and bIsRoot then return false end
+			return false
+		end)
+
 		for _, instanceData in ipairs(data.instances) do
-			self:CreateOrUpdateInstance(instanceData)
+			self:CreateOrUpdateInstance(instanceData, true)
 		end
 	end
 
-	-- Update file tree UI
-	self.MainWindow:UpdateFileTree(data.instances)
+	-- Build nested tree for UI from flat list
+	local treeData = self:BuildTreeFromFlatList(data.instances or {}, data.rootIds or {})
+	self.MainWindow:LogActivity("info", "[DEBUG] Tree built, " .. #treeData .. " roots, updating UI...")
+	self.MainWindow:UpdateFileTree(treeData)
 
-	self.MainWindow:SetStatus("Sync complete - " .. (data.count or 0) .. " instances", nil)
+	local count = data.count or #data.instances
+	self.InstanceCount = count
+	self.MainWindow:SetInstanceCount(count)
+	self.MainWindow:SetStatus("Sync complete — " .. count .. " instances", nil)
+	self.MainWindow:LogActivity("success", "Full sync: " .. count .. " instances loaded")
+end
+
+-- Build nested tree structure from flat instance list
+function InstanceSync:BuildTreeFromFlatList(instances, rootIds)
+	-- Build lookup by id
+	local lookup = {}
+	for _, inst in ipairs(instances) do
+		lookup[inst.id] = inst
+	end
+
+	-- Attach children as full objects
+	local roots = {}
+	for _, inst in ipairs(instances) do
+		if inst.children and #inst.children > 0 then
+			local fullChildren = {}
+			for _, childId in ipairs(inst.children) do
+				if lookup[childId] then
+					table.insert(fullChildren, lookup[childId])
+				end
+			end
+			inst.children = fullChildren
+		else
+			inst.children = {}
+		end
+
+		if inst.parentId == nil then
+			table.insert(roots, inst)
+		end
+	end
+
+	return roots
 end
 
 function InstanceSync:HandleInstanceCreated(data)
 	local instance = self:CreateOrUpdateInstance(data)
 	if instance then
 		self.MainWindow:AddFileNode(data.parentId, data)
+		self.InstanceCount = self.InstanceCount + 1
+		self.MainWindow:SetInstanceCount(self.InstanceCount)
+		self.MainWindow:LogActivity("success", "Created: " .. (data.name or "?") .. " (" .. (data.className or "?") .. ")")
 	end
 end
 
 function InstanceSync:HandleInstanceUpdated(data)
-	self:CreateOrUpdateInstance(data)
+	-- Save undo state before modifying
+	self:PushUndo(data.id or data.name, data)
+
+	local instance = self:CreateOrUpdateInstance(data)
+	if instance then
+		self.MainWindow:LogActivity("info", "Updated: " .. (data.name or "?"))
+		self.MainWindow:EnableUndo(true)
+	end
 end
 
 function InstanceSync:HandleInstanceDeleted(data)
-	local instance = self.InstanceMap[data.id]
+	local id = data.id
+	local instance = self.InstanceMap[id]
+
 	if instance and instance.Parent then
+		self:PushUndo(id, { id = id, name = instance.Name, className = instance.ClassName })
 		instance:Destroy()
 	end
-	self.InstanceMap[data.id] = nil
-	self.MainWindow:RemoveFileNode(data.id)
+
+	self.InstanceMap[id] = nil
+	self.MainWindow:RemoveFileNode(id)
+	self.InstanceCount = math.max(0, self.InstanceCount - 1)
+	self.MainWindow:SetInstanceCount(self.InstanceCount)
+	self.MainWindow:LogActivity("warn", "Deleted: " .. (data.name or id))
+	self.MainWindow:EnableUndo(true)
 end
 
 function InstanceSync:HandleInstanceMoved(data)
 	local instance = self.InstanceMap[data.id]
 	if not instance then return end
 
+	local oldParent = instance.Parent
 	local newParent = self:FindParent(data.newParentId)
+
 	if newParent then
+		self:PushUndo(data.id, { id = data.id, name = instance.Name, oldParentId = oldParent and oldParent.Name })
 		instance.Parent = newParent
+		self.MainWindow:LogActivity("info", "Moved: " .. instance.Name)
+		self.MainWindow:EnableUndo(true)
 	end
 end
 
 function InstanceSync:HandleInstanceRenamed(data)
 	local instance = self.InstanceMap[data.id]
 	if instance then
+		local oldName = instance.Name
+		self:PushUndo(data.id, { id = data.id, oldName = oldName })
 		instance.Name = data.newName
+		self.MainWindow:LogActivity("info", "Renamed: " .. oldName .. " → " .. data.newName)
+		self.MainWindow:EnableUndo(true)
 	end
 end
 
 function InstanceSync:HandlePropertyChanged(data)
-	local instance = self.InstanceMap[data.instanceId]
+	local instance = self.InstanceMap[data.instanceId or data.id]
 	if not instance then return end
 
 	local propName = data.property
 	local propValue = data.value
 
+	-- Save old value for undo
+	local oldValue = nil
+	pcall(function() oldValue = instance[propName] end)
+	self:PushUndo(data.instanceId or data.id, {
+		id = data.instanceId or data.id,
+		property = propName,
+		oldValue = oldValue,
+		newValue = propValue,
+	})
+
 	pcall(function()
 		instance[propName] = propValue
 	end)
+	self.MainWindow:LogActivity("info", "Property: " .. (instance.Name or "?") .. "." .. propName)
+	self.MainWindow:EnableUndo(true)
 end
 
 function InstanceSync:HandleScriptSource(data)
@@ -158,228 +248,278 @@ function InstanceSync:HandleScriptSource(data)
 	if not instance then return end
 
 	if instance:IsA("LuaSourceContainer") then
+		local oldSource = instance.Source
+		self:PushUndo(data.id, {
+			id = data.id,
+			oldSource = oldSource,
+			newSource = data.source,
+		})
 		instance.Source = data.source
+		self.MainWindow:LogActivity("info", "Script updated: " .. instance.Name)
+		self.MainWindow:EnableUndo(true)
 	end
 end
-
-function InstanceSync:CreateOrUpdateInstance(data)
+function InstanceSync:CreateOrUpdateInstance(data, isInitialSync)
 	if not self.Enabled then return nil end
 
-	-- Check if instance already exists
+	-- Check if already in our map
 	local existing = self.InstanceMap[data.id]
 	if existing then
 		self:UpdateInstance(existing, data)
 		return existing
 	end
 
-	-- Find or create parent
 	local parent = self:FindParent(data.parentId)
 	if not parent then
-		-- Try to find service by name
 		parent = SERVICE_MAP[data.parentName]
 	end
 
+	-- For root instances: if name is a Roblox service, use it directly (skip creating folder)
+	if not parent and data.parentId == nil then
+		parent = SERVICE_MAP[data.name]
+		if parent then
+			self.InstanceMap[data.id] = parent
+			return parent
+		end
+	end
+
 	if not parent then
-		warn("[Rune] Parent not found for: " .. tostring(data.name))
+		if not isInitialSync then
+			warn("[Rune] Parent not found for: " .. tostring(data.name))
+		end
 		return nil
 	end
 
-	-- Create instance
+	-- Check if an instance with this name already exists under the parent
+	local existingChild = parent:FindFirstChild(data.name)
+	if existingChild then
+		-- Update existing instead of creating duplicate
+		self.InstanceMap[data.id] = existingChild
+		if data.source and existingChild:IsA("LuaSourceContainer") then
+			existingChild.Source = data.source
+		end
+		self:UpdateInstance(existingChild, data)
+		return existingChild
+	end
+
+	-- Create new instance
 	local className = data.className or "Folder"
 	local instance = nil
 
-	local success, result = pcall(function()
+	local success = pcall(function()
 		if className == "Script" or className == "LocalScript" or className == "ModuleScript" then
 			instance = Instance.new(className)
 		elseif className == "Folder" then
 			instance = Instance.new("Folder")
-		elseif className == "Model" then
-			instance = Instance.new("Model")
-		elseif className == "Part" then
-			instance = Instance.new("Part")
-		elseif className == "MeshPart" then
-			instance = Instance.new("MeshPart")
-		elseif className == "UnionOperation" then
-			instance = Instance.new("UnionOperation")
-		elseif className == "Decal" then
-			instance = Instance.new("Decal")
-		elseif className == "Texture" then
-			instance = Instance.new("Texture")
-		elseif className == "Sound" then
-			instance = Instance.new("Sound")
-		elseif className == "Animation" then
-			instance = Instance.new("Animation")
-		elseif className == "ScreenGui" then
-			instance = Instance.new("ScreenGui")
-		elseif className == "Frame" then
-			instance = Instance.new("Frame")
-		elseif className == "TextLabel" then
-			instance = Instance.new("TextLabel")
-		elseif className == "TextButton" then
-			instance = Instance.new("TextButton")
-		elseif className == "ImageLabel" then
-			instance = Instance.new("ImageLabel")
-		elseif className == "ImageButton" then
-			instance = Instance.new("ImageButton")
-		elseif className == "IntValue" then
-			instance = Instance.new("IntValue")
-		elseif className == "StringValue" then
-			instance = Instance.new("StringValue")
-		elseif className == "BoolValue" then
-			instance = Instance.new("BoolValue")
-		elseif className == "NumberValue" then
-			instance = Instance.new("NumberValue")
-		elseif className == "Color3Value" then
-			instance = Instance.new("Color3Value")
-		elseif className == "Vector3Value" then
-			instance = Instance.new("Vector3Value")
-		elseif className == "Configuration" then
-			instance = Instance.new("Configuration")
-		else
-			instance = Instance.new("Folder")
+		elseif className == "Model" then instance = Instance.new("Model")
+		elseif className == "Part" then instance = Instance.new("Part")
+		elseif className == "MeshPart" then instance = Instance.new("MeshPart")
+		elseif className == "ScreenGui" then instance = Instance.new("ScreenGui")
+		elseif className == "Frame" then instance = Instance.new("Frame")
+		elseif className == "TextLabel" then instance = Instance.new("TextLabel")
+		elseif className == "TextButton" then instance = Instance.new("TextButton")
+		elseif className == "ImageLabel" then instance = Instance.new("ImageLabel")
+		elseif className == "Sound" then instance = Instance.new("Sound")
+		elseif className == "Animation" then instance = Instance.new("Animation")
+		elseif className == "IntValue" then instance = Instance.new("IntValue")
+		elseif className == "StringValue" then instance = Instance.new("StringValue")
+		elseif className == "BoolValue" then instance = Instance.new("BoolValue")
+		elseif className == "NumberValue" then instance = Instance.new("NumberValue")
+		elseif className == "Color3Value" then instance = Instance.new("Color3Value")
+		elseif className == "Vector3Value" then instance = Instance.new("Vector3Value")
+		else instance = Instance.new("Folder")
 		end
 	end)
 
 	if not success or not instance then
-		warn("[Rune] Failed to create instance: " .. tostring(className))
+		warn("[Rune] Failed to create: " .. tostring(className))
 		return nil
 	end
 
-	-- Set name
 	instance.Name = data.name or "NewInstance"
 
-	-- Set properties
 	if data.properties then
 		for propName, propData in pairs(data.properties) do
 			pcall(function()
-				if typeof(propData.value) == "Color3" then
-					instance[propName] = Color3.new(
-						propData.value.r or 1,
-						propData.value.g or 1,
-						propData.value.b or 1
-					)
-				elseif typeof(propData.value) == "Vector3" then
-					instance[propName] = Vector3.new(
-						propData.value.x or 0,
-						propData.value.y or 0,
-						propData.value.z or 0
-					)
-				else
+				if typeof(propData) == "table" and propData.value ~= nil then
 					instance[propName] = propData.value
+				else
+					instance[propName] = propData
 				end
 			end)
 		end
 	end
 
-	-- Set source for scripts
 	if data.source and instance:IsA("LuaSourceContainer") then
 		instance.Source = data.source
 	end
 
-	-- Set attributes
 	if data.attributes then
 		for attrName, attrValue in pairs(data.attributes) do
-			pcall(function()
-				instance:SetAttribute(attrName, attrValue)
-			end)
+			pcall(function() instance:SetAttribute(attrName, attrValue) end)
 		end
 	end
 
-	-- Set tags
 	if data.tags then
 		for _, tag in ipairs(data.tags) do
-			pcall(function()
-				instance:AddTag(tag)
-			end)
+			pcall(function() instance:AddTag(tag) end)
 		end
 	end
 
-	-- Parent the instance
 	instance.Parent = parent
-
-	-- Store in map
 	self.InstanceMap[data.id] = instance
 
 	return instance
 end
 
 function InstanceSync:UpdateInstance(instance, data)
-	-- Update name
 	if data.name and instance.Name ~= data.name then
 		instance.Name = data.name
 	end
 
-	-- Update properties
 	if data.properties then
 		for propName, propData in pairs(data.properties) do
 			pcall(function()
-				instance[propName] = propData.value
+				if typeof(propData) == "table" and propData.value ~= nil then
+					instance[propName] = propData.value
+				else
+					instance[propName] = propData
+				end
 			end)
 		end
 	end
 
-	-- Update source
 	if data.source and instance:IsA("LuaSourceContainer") then
 		instance.Source = data.source
 	end
 
-	-- Update attributes
 	if data.attributes then
 		for attrName, attrValue in pairs(data.attributes) do
-			pcall(function()
-				instance:SetAttribute(attrName, attrValue)
-			end)
+			pcall(function() instance:SetAttribute(attrName, attrValue) end)
 		end
 	end
 end
 
 function InstanceSync:FindParent(parentId)
-	if not parentId then
-		return game
+	if not parentId then return game end
+	return self.InstanceMap[parentId] or SERVICE_MAP[parentId]
+end
+
+-- ===== UNDO SYSTEM =====
+
+function InstanceSync:PushUndo(id, snapshot)
+	table.insert(self.UndoStack, {
+		id = id,
+		snapshot = snapshot,
+		timestamp = os.time(),
+	})
+
+	while #self.UndoStack > MAX_UNDO do
+		table.remove(self.UndoStack, 1)
+	end
+end
+
+function InstanceSync:UndoLastChange()
+	if #self.UndoStack == 0 then
+		self.MainWindow:LogActivity("warn", "Nothing to undo")
+		return false
 	end
 
-	local parent = self.InstanceMap[parentId]
-	if parent then
-		return parent
+	local entry = table.remove(self.UndoStack)
+	local snap = entry.snapshot
+
+	self.MainWindow:LogActivity("sync", "Undoing: " .. (snap.name or snap.id or "?"))
+
+	-- Try to restore
+	local instance = self.InstanceMap[snap.id]
+	if not instance then
+		self.MainWindow:LogActivity("error", "Cannot undo: instance gone")
+		return false
 	end
 
-	-- Check if it's a service name
-	return SERVICE_MAP[parentId]
+	-- Restore name
+	if snap.oldName then
+		instance.Name = snap.oldName
+		self.MainWindow:LogActivity("info", "Name restored: " .. snap.oldName)
+	end
+
+	-- Restore source
+	if snap.oldSource then
+		if instance:IsA("LuaSourceContainer") then
+			instance.Source = snap.oldSource
+			self.MainWindow:LogActivity("info", "Script source restored")
+		end
+	end
+
+	-- Restore property
+	if snap.oldValue ~= nil and snap.property then
+		pcall(function()
+			instance[snap.property] = snap.oldValue
+		end)
+		self.MainWindow:LogActivity("info", "Property restored: " .. snap.property)
+	end
+
+	-- Restore parent
+	if snap.oldParentId then
+		local oldParent = self:FindParent(snap.oldParentId)
+		if oldParent then
+			instance.Parent = oldParent
+			self.MainWindow:LogActivity("info", "Parent restored")
+		end
+	end
+
+	if #self.UndoStack == 0 then
+		self.MainWindow:EnableUndo(false)
+	end
+
+	return true
+end
+
+-- ===== STUDIO LISTENERS =====
+
+-- Check if instance is a GUI element that should NOT be synced
+local function isGuiElement(instance)
+	if instance:IsA("GuiObject") or instance:IsA("GuiBase2d") or instance:IsA("PluginGui") then
+		return true
+	end
+	local current = instance
+	while current do
+		if current:IsA("PluginGui") or current:IsA("PlayerGui")
+			or current:IsA("CoreGui") or current:IsA("StarterGui")
+			or current:IsA("PluginGui") then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
 end
 
 function InstanceSync:SetupStudioListeners()
-	-- Listen for instance changes in Studio
 	game.DescendantAdded:Connect(function(instance)
 		if not self.Enabled then return end
+		if isGuiElement(instance) then return end
 		if self:IsSyncedInstance(instance) then return end
-
-		-- Notify server of new instance
 		self:NotifyInstanceCreated(instance)
 	end)
 
 	game.DescendantRemoving:Connect(function(instance)
 		if not self.Enabled then return end
+		if isGuiElement(instance) then return end
 		if not self:IsSyncedInstance(instance) then return end
-
-		-- Notify server of removed instance
 		self:NotifyInstanceDeleted(instance)
 	end)
 end
 
 function InstanceSync:IsSyncedInstance(instance)
 	for _, synced in pairs(self.InstanceMap) do
-		if synced == instance then
-			return true
-		end
+		if synced == instance then return true end
 	end
 	return false
 end
 
 function InstanceSync:NotifyInstanceCreated(instance)
-	-- Debounce to avoid spam
 	task.delay(0.5, function()
 		if not instance or not instance.Parent then return end
-
 		local data = self:SerializeInstance(instance)
 		if data then
 			self.WebSocket:Send({
@@ -405,61 +545,51 @@ end
 
 function InstanceSync:SerializeInstance(instance)
 	local className = instance.ClassName
-
-	-- Only sync supported types
 	local supported = {
-		Folder = true,
-		Script = true,
-		LocalScript = true,
-		ModuleScript = true,
-		Model = true,
-		Part = true,
-		MeshPart = true,
-		UnionOperation = true,
-		Decal = true,
-		Texture = true,
-		Sound = true,
-		Animation = true,
-		ScreenGui = true,
-		Frame = true,
-		TextLabel = true,
-		TextButton = true,
-		ImageLabel = true,
-		ImageButton = true,
-		IntValue = true,
-		StringValue = true,
-		BoolValue = true,
-		NumberValue = true,
-		Color3Value = true,
-		Vector3Value = true,
-		Configuration = true,
+		Folder = true, Script = true, LocalScript = true, ModuleScript = true,
+		Model = true, Part = true, MeshPart = true, UnionOperation = true,
+		Decal = true, Texture = true, Sound = true, Animation = true,
+		ScreenGui = true, Frame = true, TextLabel = true, TextButton = true,
+		ImageLabel = true, ImageButton = true, IntValue = true,
+		StringValue = true, BoolValue = true, NumberValue = true,
+		Color3Value = true, Vector3Value = true, Configuration = true,
 	}
+	if not supported[className] then return nil end
 
-	if not supported[className] then
-		return nil
+	-- Find parent info
+	local parentId = nil
+	local parentName = nil
+	if instance.Parent and instance.Parent ~= game then
+		-- Check if parent is in our InstanceMap
+		for id, synced in pairs(self.InstanceMap) do
+			if synced == instance.Parent then
+				parentId = id
+				parentName = synced.Name
+				break
+			end
+		end
+		-- Fallback: use parent name as service reference
+		if not parentId then
+			parentName = instance.Parent.Name
+		end
 	end
 
 	local data = {
 		name = instance.Name,
 		className = className,
+		parentId = parentId,
+		parentName = parentName,
 	}
 
-	-- Get source for scripts
 	if instance:IsA("LuaSourceContainer") then
 		data.source = instance.Source
 	end
 
-	-- Get attributes
 	local attributes = instance:GetAttributes()
-	if next(attributes) then
-		data.attributes = attributes
-	end
+	if next(attributes) then data.attributes = attributes end
 
-	-- Get tags
 	local tags = instance:GetTags()
-	if #tags > 0 then
-		data.tags = tags
-	end
+	if #tags > 0 then data.tags = tags end
 
 	return data
 end
@@ -467,6 +597,7 @@ end
 function InstanceSync:Destroy()
 	self.Enabled = false
 	self.InstanceMap = {}
+	self.UndoStack = {}
 end
 
 return InstanceSync

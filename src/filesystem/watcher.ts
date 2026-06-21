@@ -491,40 +491,30 @@ export class FileWatcher {
       return null;
     }
 
-    // Check if folder instance already exists
-    const existingFolder = this.instanceTree.findInstance(
-      basename(folderPath),
-      null, // For now, we'll search globally
-    );
+    // Normalize Windows backslashes to forward slashes
+    const normalized = folderPath.replace(/\\/g, "/");
 
-    if (existingFolder) {
-      return existingFolder.id;
-    }
+    // Split into parts, skip first component if it's "src" (source root)
+    const parts = normalized.split("/").filter((p) => p && p !== "src");
 
-    // Create folder hierarchy
-    const parts = folderPath.split("/").filter((p) => p);
+    // Build hierarchy: each folder becomes child of the previous
     let currentParentId: string | null = null;
-    let currentPath = "";
 
     for (const part of parts) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-
-      // Check if this folder already exists
+      // Build the path for this specific folder level
+      const partPath = currentParentId ? `${normalized}::${part}` : normalized;
+      
+      // Check if folder already exists under this parent
       const existing = this.instanceTree.findInstance(part, currentParentId);
-
       if (existing) {
         currentParentId = existing.id;
-      } else {
-        const newInst = this.createFolderInstance(
-          part,
-          currentParentId,
-          currentPath,
-        );
-
-        this.instanceTree.addInstance(newInst);
-        this.fileToInstanceMap.set(currentPath, newInst.id);
-        currentParentId = newInst.id;
+        continue;
       }
+
+      const newInst = this.createFolderInstance(part, currentParentId, partPath);
+      this.instanceTree.addInstance(newInst);
+      this.fileToInstanceMap.set(partPath, newInst.id);
+      currentParentId = newInst.id;
     }
 
     return currentParentId;

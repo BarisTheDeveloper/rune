@@ -35,12 +35,11 @@ function generateReferent(): string {
  * Detects Roblox class from file extension and name
  */
 function detectClassFromFile(filePath: string): string {
-  const ext = extname(filePath);
-  const name = basename(filePath, ext);
+  const name = basename(filePath);
 
-  if (ext === ".server.lua") return "Script";
-  if (ext === ".client.lua") return "LocalScript";
-  if (ext === ".module.lua" || ext === ".lua") return "ModuleScript";
+  if (name.endsWith(".server.lua")) return "Script";
+  if (name.endsWith(".client.lua")) return "LocalScript";
+  if (name.endsWith(".module.lua") || name.endsWith(".lua")) return "ModuleScript";
 
   return "Folder";
 }

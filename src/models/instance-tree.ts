@@ -119,7 +119,7 @@ export class InstanceTree {
     name: string,
     parentId: string | null = null,
   ): RobloxInstanceModel | undefined {
-    for (const instance of this.instances.values()) {
+    for (const instance of Array.from(this.instances.values())) {
       if (instance.name === name && instance.parentId === parentId) {
         return instance;
       }
@@ -134,7 +134,7 @@ export class InstanceTree {
    */
   public findByClassName(className: RobloxClassName): RobloxInstanceModel[] {
     const results: RobloxInstanceModel[] = [];
-    for (const instance of this.instances.values()) {
+    for (const instance of Array.from(this.instances.values())) {
       if (instance.className === className) {
         results.push(instance);
       }
@@ -242,12 +242,73 @@ export class InstanceTree {
   }
 
   /**
+   * Gets the full hierarchy for sending to Studio
+   * @returns Array of serialized root instances with children
+   */
+  public getHierarchy(): unknown[] {
+    return this.rootIds
+      .map((id) => this.instances.get(id))
+      .filter((inst): inst is RobloxInstanceModel => inst !== undefined)
+      .map((inst) => inst.serialize());
+  }
+
+  /**
+   * Updates an existing instance in the tree
+   * @param instance - The instance with updated data
+   */
+  public updateInstance(instance: RobloxInstanceModel): void {
+    const existing = this.instances.get(instance.id);
+    if (!existing) {
+      this.addInstance(instance);
+      return;
+    }
+    // Update mutable fields
+    existing.name = instance.name;
+    existing.className = instance.className;
+    if (instance.source !== undefined) {
+      existing.source = instance.source;
+    }
+    if (instance.properties) {
+      existing.properties = instance.properties;
+    }
+  }
+
+  /**
+   * Updates the script source for an instance
+   * @param instanceId - The instance ID
+   * @param source - The new script source
+   */
+  public updateScriptSource(instanceId: string, source: string): void {
+    const instance = this.instances.get(instanceId);
+    if (instance) {
+      instance.source = source;
+    }
+  }
+
+  /**
+   * Updates a property on an instance
+   * @param instanceId - The instance ID
+   * @param propertyName - The property name
+   * @param value - The new property value
+   */
+  public updateProperty(
+    instanceId: string,
+    propertyName: string,
+    value: unknown,
+  ): void {
+    const instance = this.instances.get(instanceId);
+    if (instance) {
+      instance.setProperty(propertyName, typeof value, value);
+    }
+  }
+
+  /**
    * Serializes the entire tree to a plain object
    * @returns Serialized tree data
    */
   public serialize(): Record<string, unknown> {
     const instances: Record<string, unknown> = {};
-    for (const [id, instance] of this.instances) {
+    for (const [id, instance] of Array.from(this.instances)) {
       instances[id] = instance.serialize();
     }
 

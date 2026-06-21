@@ -161,7 +161,7 @@ export class RobloxInstanceModel {
    */
   public serialize(): Record<string, unknown> {
     const properties: Record<string, unknown> = {};
-    for (const [key, prop] of this.properties) {
+    for (const [key, prop] of Array.from(this.properties)) {
       properties[key] = {
         type: prop.type,
         value: prop.value,
@@ -170,7 +170,7 @@ export class RobloxInstanceModel {
 
     const attributes: Record<string, unknown> = {};
     if (this.attributes) {
-      for (const [key, value] of this.attributes) {
+      for (const [key, value] of Array.from(this.attributes)) {
         attributes[key] = value;
       }
     }
@@ -253,7 +253,7 @@ export class RobloxInstanceModel {
     );
 
     // Clone properties
-    for (const [key, prop] of this.properties) {
+    for (const [key, prop] of Array.from(this.properties)) {
       cloned.setProperty(key, prop.type, prop.value);
     }
 
@@ -272,7 +272,7 @@ export class RobloxInstanceModel {
 
     // Clone attributes
     if (this.attributes) {
-      for (const [key, value] of this.attributes) {
+      for (const [key, value] of Array.from(this.attributes)) {
         cloned.setAttribute(key, value);
       }
     }

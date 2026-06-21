@@ -55,9 +55,9 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
 
       // Notify Studio about new instance
       if (syncServer.getIsRunning()) {
-        syncServer.broadcastToAll({
-          type: "instance_create",
-          payload: { instance: instance.serialize() },
+        syncServer.broadcast({
+          type: "instance_created",
+          data: instance.serialize(),
         });
       }
     });
@@ -67,16 +67,9 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
 
       // Notify Studio about updated instance
       if (syncServer.getIsRunning()) {
-        syncServer.broadcastToAll({
-          type: "instance_update",
-          payload: {
-            instanceId: instance.id,
-            changes: {
-              name: instance.name,
-              className: instance.className,
-              source: instance.source,
-            },
-          },
+        syncServer.broadcast({
+          type: "instance_updated",
+          data: instance.serialize(),
         });
       }
     });
@@ -86,9 +79,9 @@ export async function watchCommand(options: WatchOptions): Promise<void> {
 
       // Notify Studio about deleted instance
       if (syncServer.getIsRunning()) {
-        syncServer.broadcastToAll({
-          type: "instance_delete",
-          payload: { instanceId },
+        syncServer.broadcast({
+          type: "instance_deleted",
+          data: { id: instanceId },
         });
       }
     });
