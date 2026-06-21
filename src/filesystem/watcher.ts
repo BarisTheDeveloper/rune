@@ -5,7 +5,7 @@
 
 import chokidar from "chokidar";
 import type { FSWatcher } from "chokidar";
-import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync, rmdirSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { join, relative, dirname, basename, extname } from "node:path";
 import type { InstanceDefinition, RobloxClassName } from "../types/index.js";
 import type { ScriptType } from "../utils/script-detector.js";
@@ -472,6 +472,10 @@ export class FileWatcher {
       this.instanceToFileMap.delete(instanceId);
 
       logger.info(`Directory deleted: ${relativePath}`);
+
+      if (this.onInstanceDelete) {
+        this.onInstanceDelete(instanceId);
+      }
     }
   }
 
@@ -723,13 +727,22 @@ export class FileWatcher {
 
     const fullPath = join(this.projectRoot, relativePath);
     try {
+      const isDir = existsSync(fullPath) && statSync(fullPath).isDirectory();
+
       if (this.watcher) this.watcher.unwatch(fullPath);
-      unlinkSync(fullPath);
+
+      if (isDir) {
+        rmdirSync(fullPath, { recursive: true });
+        logger.success(`Studio → Deleted dir: ${relativePath}`);
+      } else {
+        unlinkSync(fullPath);
+        logger.success(`Studio → Deleted: ${relativePath}`);
+      }
+
       this.fileToInstanceMap.delete(relativePath);
       this.instanceToFileMap.delete(instanceId);
-      logger.success(`Studio → Deleted: ${relativePath}`);
     } catch (error) {
-      logger.error(`Failed to delete file: ${fullPath}`);
+      logger.error(`Failed to delete: ${fullPath}`);
     }
   }
 }
